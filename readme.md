@@ -1,6 +1,5 @@
-# Google Photos Manager
-
-
+# google-photos-manager
+My google-photos-manager
 [Google APIs Client Library for JavaScript](https://github.com/google/google-api-javascript-client)
 
 [Google API Console](https://console.developers.google.com/project)
