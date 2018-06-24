@@ -6,6 +6,7 @@
   <script src="scripts/jquery-3.3.1.js"></script>
   <script src="scripts/common.js"></script>
   <script src="https://apis.google.com/js/api.js"></script>
+  <!--script src="https://apis.google.com/js/platform.js?onload=init" async defer></script-->
 
   <script>
     /**
@@ -13,7 +14,19 @@
      * See instructions for running APIs Explorer code samples locally:
      * https://developers.google.com/explorer-help/guides/code_samples#javascript
      */
+
+    var CLIENT_ID = "127194997596-c7r639bo47670j2c069ipak5voebejrq.apps.googleusercontent.com"
+    var auth2;      // The Sign-In object.
+    var googleUser; // The current user.
   
+    // function init() {
+    //   console.log('init()');
+    //   gapi.load('auth2', function() { 
+    //     console.log('Ready.');
+    //     // Ready. 
+    //   });
+    // }
+
     function authenticate() {
       return gapi.auth2.getAuthInstance()
           .signIn({scope: "https://www.googleapis.com/auth/drive.photos.readonly https://www.googleapis.com/auth/photoslibrary https://www.googleapis.com/auth/photoslibrary.readonly https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata"})
@@ -28,7 +41,7 @@
   
     // Make sure the client is loaded and sign-in is complete before calling this method.
     function listAlbums() {
-      return gapi.client.photoslibrary.albums.list({})
+      return gapi.client.photoslibrary.albums.list({pageSize: 50})
           .then(function(response) {
                   // Handle the results here (response.result has the parsed body).
                   console.log("Response", response);
@@ -52,15 +65,21 @@
       console.log('listMediaItems(\'' + albumId + '\')');
 
 
-      $.ajax({
-          url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search', 
-          type: 'GET',
-          success: function(res) {
-              alert(res.status); //responds with "OK"
-          }
-      });
+      // $.ajax({
+      //     url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search', 
+      //     type: 'GET',
+      //     success: function(res) {
+      //         alert(res.status); //responds with "OK"
+      //     }
+      // });
 
-      //gapi.client.photoslibrary.albums.listMediaItems(albumId);
+      gapi.client.photoslibrary.albums.listMediaItems(albumId);
+      // .then(function(response) {
+      //   // Handle the results here (response.result has the parsed body).
+      //   console.log("Response", response);
+      // },
+      // function(err) { console.error("Execute error", err); });
+
       //loadFromAlbum(albumId, albumId);
 
     }
@@ -68,7 +87,6 @@
     gapi.load("client:auth2", function() {
       gapi.auth2.init({client_id: '127194997596-c7r639bo47670j2c069ipak5voebejrq.apps.googleusercontent.com'});
     });
-  
   
   // Loads a list of all albums owned by the logged in user from the backend.
   // The backend returns a list of albums from the Library API that is rendered

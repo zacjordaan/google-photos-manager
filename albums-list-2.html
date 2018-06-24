@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+
+  <script src="https://apis.google.com/js/api.js"></script>
+
+  <script>
+
+  console.log('START');
+
+  var CLIENT_ID = "127194997596-c7r639bo47670j2c069ipak5voebejrq.apps.googleusercontent.com"
+  var auth2;      // The Sign-In object.
+  var googleUser; // The current user.
+
+  /**
+  * Calls startAuth after Sign in V2 finishes setting up.
+  */
+  var appStart = function() {
+    console.log('appStart');
+    gapi.load('auth2', initSigninV2);
+  };
+
+  /**
+  * Initializes Signin v2 and sets up listeners.
+  */
+  var initSigninV2 = function() {
+    console.log('initSigninV2');
+
+    auth2 = gapi.auth2.init({
+        client_id: CLIENT_ID,
+        scope: 'profile'
+    });
+
+    // Listen for sign-in state changes.
+    auth2.isSignedIn.listen(signinChanged);
+
+    // Listen for changes to current user.
+    auth2.currentUser.listen(userChanged);
+
+    // Sign in the user if they are currently signed in.
+    if (auth2.isSignedIn.get() == true) {
+      auth2.signIn();
+    }
+
+    // Start with the current live values.
+    refreshValues();
+  };
+
+  /**
+  * Listener method for sign-out live value.
+  *
+  * @param {boolean} val the updated signed out state.
+  */
+  var signinChanged = function (val) {
+    console.log('Signin state changed to ', val);
+    document.getElementById('signed-in-cell').innerText = val;
+  };
+
+  /**
+  * Listener method for when the user changes.
+  *
+  * @param {GoogleUser} user the updated user.
+  */
+  var userChanged = function (user) {
+    console.log('User now: ', user);
+    googleUser = user;
+    updateGoogleUser();
+    document.getElementById('curr-user-cell').innerText = JSON.stringify(user, undefined, 2);
+  };
+
+  /**
+  * Updates the properties in the Google User table using the current user.
+  */
+  var updateGoogleUser = function () {
+    console.log('updateGoogleUser()');
+
+    if (googleUser) {
+      document.getElementById('user-id').innerText = googleUser.getId();
+      document.getElementById('user-scopes').innerText = googleUser.getGrantedScopes();
+      document.getElementById('auth-response').innerText = JSON.stringify(googleUser.getAuthResponse(), undefined, 2);
+    } else {
+      document.getElementById('user-id').innerText = '--';
+      document.getElementById('user-scopes').innerText = '--';
+      document.getElementById('auth-response').innerText = '--';
+    }
+
+  };
+
+  /**
+  * Retrieves the current user and signed in states from the GoogleAuth
+  * object.
+  */
+  var refreshValues = function() {
+    console.log('refreshValues()');
+
+    if (auth2){
+      console.log('Refreshing values...');
+      //console.log('auth2:', auth2);
+
+      googleUser = auth2.currentUser.get();
+
+      document.getElementById('curr-user-cell').innerText =
+        JSON.stringify(googleUser, undefined, 2);
+      document.getElementById('signed-in-cell').innerText =
+        auth2.isSignedIn.get();
+
+      updateGoogleUser();
+    }
+  }
+
+  appStart();
+
+  </script>
+
+  <script>
+  
+    // Make sure the client is loaded and sign-in is complete before calling this method.
+    function listAlbums() {
+      return gapi.client.photoslibrary.albums.list({})
+          .then(function(response) {
+                  // Handle the results here (response.result has the parsed body).
+                  console.log("Response", response);
+  
+                  var divAlbums = document.getElementById('divAlbums');
+  
+                  // clear children
+                  while (divAlbums.firstChild) {
+                    divAlbums.removeChild(divAlbums.firstChild);
+                  }
+  
+                  response.result.albums.forEach(album => {
+                    divAlbums.insertAdjacentHTML('beforeend', '<li id="' + album.id + '" onclick="listMediaItems(\'' + album.id + '\')">' + album.title + ' <a href="' + album.productUrl + '"> --> </a></li>');
+                  });
+  
+                },
+                function(err) { console.error("Execute error", err); });
+    }
+  
+  </script>
+
+</head>
+<body>
+
+  <table style="display: none;">
+    <tr>
+      <td>signed-in-cell:</td>
+      <td id="signed-in-cell"></td>
+    </tr>
+    <tr>
+      <td>curr-user-cell:</td>
+      <td id="curr-user-cell"></td>
+    </tr>
+    <tr>
+        <td>user-id:</td>
+        <td id="user-id"></td>
+    </tr>
+    <tr>
+        <td>user-scopes:</td>
+        <td id="user-scopes"></td>
+    </tr>
+    <tr>
+        <td>auth-response:</td>
+        <td id="auth-response"></td>
+    </tr>
+  </table>
+
+  <button onclick="listAlbums()">List Albums</button>
+
+  <br/>
+  <br/>
+  Albums:<br/>
+  <div id="divAlbums"></div>
+
+</body>
+</html>
