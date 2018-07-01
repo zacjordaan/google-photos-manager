@@ -1,19 +1,276 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Document</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  
+  
+  
+  <!-- Required Stylesheets -->
+  <link href="/lib/bootstrap-treeview-1.2.0/dist/bootstrap-treeview.min.css" rel="stylesheet">
+  <style type="text/css" id="treeview1-style">
+    .treeview .list-group-item{cursor:pointer}
+    .treeview span.indent{margin-left:10px;margin-right:10px}
+    .treeview span.icon{width:12px;margin-right:5px}
+    .treeview .node-disabled{color:silver;cursor:not-allowed}
+    .node-treeview1{}
+    .node-treeview1:not(.node-disabled):hover{background-color:#F5F5F5;}
+  </style>
+
+  <!-- Required Javascript -->
+  <script src="scripts/jquery-3.3.1.min.js"></script>
+  <script src="/lib/bootstrap-treeview-1.2.0/dist/bootstrap-treeview.min.js"></script>  <!-- https://github.com/jonmiles/bootstrap-treeview -->
+
+  <script async defer src="https://apis.google.com/js/api.js" onload="this.onload=function(){};handleClientLoad()" onreadystatechange="if (this.readyState === 'complete') this.onload()"></script>
+
+  <script>
+    // From: https://developers.google.com/identity/protocols/OAuth2UserAgent#example
+
+    var GoogleAuth;
+    //var SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly';
+    var SCOPE = 'https://www.googleapis.com/auth/drive.photos.readonly https://www.googleapis.com/auth/photoslibrary https://www.googleapis.com/auth/photoslibrary.readonly https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata'
+
+    function handleClientLoad() {
+      // Load the API's client and auth2 modules.
+      // Call the initClient function after the modules load.
+      gapi.load('client:auth2', initClient);
+    }
+  
+    function initClient() {
+      // Retrieve the discovery document for version 3 of Google Drive API.
+      // In practice, your app can retrieve one or more discovery documents.
+      //var discoveryUrl = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+      var discoveryUrl = 'https://content.googleapis.com/discovery/v1/apis/photoslibrary/v1/rest'
+  
+      // Initialize the gapi.client object, which app uses to make API requests.
+      // Get API key and client ID from API Console.
+      // 'scope' field specifies space-delimited list of access scopes.
+      gapi.client.init({
+          'apiKey': 'AIzaSyCLP9VN4SIbVXnn3SXA6JoqRqJRU3o2U9g',
+          'discoveryDocs': [discoveryUrl],
+          'clientId': '127194997596-c7r639bo47670j2c069ipak5voebejrq.apps.googleusercontent.com',
+          'scope': SCOPE
+      }).then(function () {
+        GoogleAuth = gapi.auth2.getAuthInstance();
+  
+        // Listen for sign-in state changes.
+        GoogleAuth.isSignedIn.listen(updateSigninStatus);
+  
+        // Handle initial sign-in state. (Determine if user is already signed in.)
+        var user = GoogleAuth.currentUser.get();
+        setSigninStatus();
+  
+        // Call handleAuthClick function when user clicks on
+        //      "Sign In/Authorize" button.
+        $('#sign-in-or-out-button').click(function() {
+          handleAuthClick();
+        }); 
+        $('#revoke-access-button').click(function() {
+          revokeAccess();
+        }); 
+      });
+    }
+  
+    function handleAuthClick() {
+      if (GoogleAuth.isSignedIn.get()) {
+        // User is authorized and has clicked 'Sign out' button.
+        GoogleAuth.signOut();
+      } else {
+        // User is not signed in. Start Google auth flow.
+        GoogleAuth.signIn();
+      }
+    }
+  
+    function revokeAccess() {
+      GoogleAuth.disconnect();
+    }
+  
+    function setSigninStatus(isSignedIn) {
+      var user = GoogleAuth.currentUser.get();
+      var isAuthorized = user.hasGrantedScopes(SCOPE);
+      if (isAuthorized) {
+        $('#sign-in-or-out-button').html('Sign out');
+        $('#revoke-access-button').css('display', 'inline-block');
+        $('#auth-status').html('You are currently signed in and have granted ' +
+            'access to this app.');
+      } else {
+        $('#sign-in-or-out-button').html('Sign In/Authorize');
+        $('#revoke-access-button').css('display', 'none');
+        $('#auth-status').html('You have not authorized this app or you are ' +
+            'signed out.');
+      }
+    }
+  
+    function updateSigninStatus(isSignedIn) {
+      setSigninStatus();
+    }
+  </script>
+
+
+  <script>
+  
+    // After your application obtains an access token, you can use the JavaScript client library to make API requests on the user's behalf. 
+    // The client library manages the access token for you, and you do not need to do anything special to send it in the request.
+    // The client library supports two ways to call API methods. 
+    // If you have loaded a discovery document, the API will define method-specific functions for you. 
+    // You can also use the gapi.client.request function to call an API method. 
+    //The following two snippets demonstrate these options for the Drive API's about.get method.
+
+    function test_method_specific(){    
+      // Example 1: Use method-specific function
+      var request = gapi.client.drive.about.get({'fields': 'user'});
+
+      // Execute the API request.
+      request.execute(function(response) {
+        console.log(response);
+      });
+    }
+
+    function test_gapi(){    
+      // Example 2: Use gapi.client.request(args) function
+      var request = gapi.client.request({
+        'method': 'GET',
+        'path': '/drive/v3/about',
+        'params': {'fields': 'user'}
+      });
+      // Execute the API request.
+      request.execute(function(response) {
+        console.log(response);
+      });
+    }
+
+  </script>
+
+
+  <script>
+  
+    // Make sure the client is loaded and sign-in is complete before calling this method.
+    function listAlbums() {
+      return gapi.client.photoslibrary.albums.list({pageSize: 50})
+          .then(function(response) {
+                  // Handle the results here (response.result has the parsed body).
+                  console.log("Response", response);
+
+                  var divAlbums = document.getElementById('divAlbums');
+
+                  // clear children
+                  while (divAlbums.firstChild) {
+                    divAlbums.removeChild(divAlbums.firstChild);
+                  }
+
+                  response.result.albums.forEach(album => {
+                    divAlbums.insertAdjacentHTML('beforeend', '<li id="' + album.id + '" onclick="listMediaItems(\'' + album.id + '\')">' + album.title + ' <a href="' + album.productUrl + '"> --> </a></li>');
+                  });
+
+                },
+                function(err) { console.error("Execute error", err); });
+    }
+
+    function listMediaItems(albumId){
+      console.log('listMediaItems(\'' + albumId + '\')');
+
+
+      // $.ajax({
+      //     url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search', 
+      //     type: 'GET',
+      //     success: function(res) {
+      //         alert(res.status); //responds with "OK"
+      //     }
+      // });
+
+      gapi.client.photoslibrary.albums.listMediaItems(albumId);
+      // .then(function(response) {
+      //   // Handle the results here (response.result has the parsed body).
+      //   console.log("Response", response);
+      // },
+      // function(err) { console.error("Execute error", err); });
+
+      //loadFromAlbum(albumId, albumId);
+
+    }
+  
+
+    function popTree(){
+
+      var defaultData = [
+              {
+                text: 'Parent 1',
+                href: '#parent1',
+                tags: ['4'],
+                nodes: [
+                  {
+                    text: 'Child 1',
+                    href: '#child1',
+                    tags: ['2'],
+                    nodes: [
+                      {
+                        text: 'Grandchild 1',
+                        href: '#grandchild1',
+                        tags: ['0']
+                      },
+                      {
+                        text: 'Grandchild 2',
+                        href: '#grandchild2',
+                        tags: ['0']
+                      }
+                    ]
+                  },
+                  {
+                    text: 'Child 2',
+                    href: '#child2',
+                    tags: ['0']
+                  }
+                ]
+              },
+              {
+                text: 'Parent 2',
+                href: '#parent2',
+                tags: ['0']
+              }
+            ];
+    
+      // Example: initializing the treeview
+      // expanded to 5 levels
+      // with a background color of green
+      $('#tree').treeview({
+        data: defaultData,
+        levels: 5
+      });
+
+    }
+
+  </script>
+
 </head>
 <body>
 
-    https://github.com/zacjordaan/google-photos-manager
+<button id="sign-in-or-out-button" style="margin-left: 25px">Sign In/Authorize</button>
+<button id="revoke-access-button" style="display: none; margin-left: 25px">Revoke access</button>
+<div id="auth-status" style="display: inline; padding-left: 25px"></div><hr>
 
-    <br/>
-    <br/>
-    
-    <a href="albums-list.html">albums-list.html</a>
+
+
+<button onclick="test_method_specific()">test_method_specific</button>
+&nbsp;
+<button onclick="test_gapi()">test_gapi</button>
+<br/>
+<br/>
+<button onclick="listAlbums()">List Albums</button> &nbsp; <button onclick="popTree()">popTree</button>
+<br/>
+<br/>
+Albums:<br/>
+<div id="divAlbums"></div>
+<br/>
+<br/>
+<div id="tree" class="treeview"></div>
+
+
+
+
+<!--script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script-->
+<!--script async defer src="https://apis.google.com/js/api.js" onload="this.onload=function(){};handleClientLoad()" onreadystatechange="if (this.readyState === 'complete') this.onload()"></script-->
 
 </body>
 </html>
