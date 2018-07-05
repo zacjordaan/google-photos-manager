@@ -140,8 +140,37 @@
 
   <script id="my_functions">
   
-    // Make sure the client is loaded and sign-in is complete before calling this method.
+    // Make sure the client is loaded and sign-in is complete before calling these methods.
+
+    // Making requests (from an answer at https://stackoverflow.com/questions/19233538/to-use-gapi-client-drive-files-insert-or-to-use-gapi-client-request-for-everythi)
+    // You actually have three choices ...
+    // 1. gapi..request
+    // 2. gapi..files
+    // 3. plain javascript (ie. not using any google library at all)
+    // Underlying each option is the same HTTP request/response so the functionality is the same. It probably comes down to personal preference and trust.
+    // Personal preference: Do you want to understand what your app is doing all the way down the stack, or do you prefer to use a high level abstraction?
+    // Trust, The Google JS library is closed source, and is updated arbitrarily, and without warning. So if the G engineers break it (as they have done in the past), you have nowhere to turn and your app is down until it is fixed. Provided you have a mainstream use case, it should get fixed, but there is no guarantee. If you are using an edge case (perhaps an unusual nodejs configuration, or idiosyncratic browser) you could be left high and dry.
+    // Option 1 is nice because if the Drive team add a new feature to the API, I can use it straight away, without waiting for the JS Client Library maintainer to support it too. It also makes debugging easier since what goes over the wire is directly related to my code.
+
     function listAlbums() {
+
+      // GET https://photoslibrary.googleapis.com/v1/albums
+
+      // {
+      //   "albums": [
+      //     {
+      //       "id": "ALBUM_ID",
+      //       "title": "ALBUM_TITLE",
+      //       "productUrl": "ALBUM_PRODUCT_URL",
+      //       "coverPhotoBaseUrl" "ALBUM_COVER_BASE_URL-DO_NOT_USE_DIRECTLY",
+      //       "isWriteable": "WHETHER_YOU_CAN_WRITE_TO_THIS_ALBUM",
+      //       "totalMediaItems: NUMBER_OF_MEDIA_ITEMS_IN_ALBUM
+      //     },
+      //     ...
+      //   ],
+      //   "nextPageToken": "TOKEN_FOR_PAGINATION"
+      // }
+
       return gapi.client.photoslibrary.albums.list({pageSize: 50})
           .then(function(response) {
                   // Handle the results here (response.result has the parsed body).
@@ -155,11 +184,69 @@
                   }
 
                   response.result.albums.forEach(album => {
-                    divAlbums.insertAdjacentHTML('beforeend', '<li id="' + album.id + '" onclick="listMediaItems(\'' + album.id + '\')">' + album.title + ' <a href="' + album.productUrl + '"> --> </a></li>');
+                    //console.log('album:', album);
+                    divAlbums.insertAdjacentHTML('beforeend', '<li id="' + album.id + '" onclick="listMediaItems(\'' + album.id + '\')">' + album.title + ' <a href="' + album.productUrl + '"> (' + album.totalMediaItems + ') </a></li>');
                   });
 
                 },
                 function(err) { console.error("Execute error", err); });
+    }
+
+    function listLibraryContents() {
+      
+      // POST https://photoslibrary.googleapis.com/v1/mediaItems:search
+      // Content-type: application/json
+      // Authorization: Bearer OAUTH2_TOKEN
+      // {
+      //   "pageSize":"100",
+      // }
+
+      // response contains a list of media items, ordered from most to least recent...
+      // {
+      //   "mediaItems": [
+      //     ...
+      //   ],
+      //   "nextPageToken": "TOKEN_FOR_PAGINATION"
+      // }
+
+    gapi.client.request({
+      'path'  : 'https://photoslibrary.googleapis.com/v1/mediaItems:search',
+      'method': 'POST',
+      'body'  : {
+                "pageSize":"100",
+                }
+    }).then(function(response) {
+        //writeResponse(response.result);
+        console.log('response.result:', response.result);
+
+        var divLibraryContents = document.getElementById('divLibraryContents');
+
+        // clear
+        while (divLibraryContents.firstChild) {
+          divLibraryContents.removeChild(divLibraryContents.firstChild);
+        }
+
+        response.result.mediaItems.forEach(mediaItem => {
+          //console.log('mediaItem:', mediaItem);
+          divAlbums.insertAdjacentHTML('beforeend', '<li id="' + mediaItem.id + '">' + mediaItem.description + ' <a href="' + mediaItem.productUrl + '"> (...) </a></li>');
+        });
+
+    });
+
+      /*
+      return gapi.client.photoslibrary({pageSize: 50})
+          .then(function(response) {
+                  // Handle the results here (response.result has the parsed body).
+                  console.log("Response", response);
+
+                  response.result.albums.forEach(album => {
+                    //console.log('album:', album);
+                    divAlbums.insertAdjacentHTML('beforeend', '<li id="' + album.id + '" onclick="listMediaItems(\'' + album.id + '\')">' + album.title + ' <a href="' + album.productUrl + '"> (' + album.totalMediaItems + ') </a></li>');
+                  });
+
+                },
+                function(err) { console.error("Execute error", err); });
+      */
     }
 
     function listMediaItems(albumId){
@@ -185,6 +272,18 @@
 
     }
   
+    function writeResponse(resp) {
+      var responseText;
+      if (resp.error && resp.error.errors[0].debugInfo == 'QuotaState: BLOCKED') {
+        responseText = 'Invalid API key provided. Please replace the "apiKey" value with your own.';
+      } else {
+        responseText = 'Short URL ' + shortUrl + ' expands to ' + resp.longUrl;
+      }
+      var infoDiv = document.getElementById('info');
+      infoDiv.innerHTML = '';
+      infoDiv.appendChild(document.createTextNode(responseText));
+    }
+
   </script>
 
 </head>
@@ -201,15 +300,24 @@
 <button onclick="test_gapi()">test_gapi</button>
 -->
 
+<div id="infoDiv"></div>
+
+
 <table>
   <tr>
     <td>
         <button onclick="listAlbums()" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-button--accent">List Albums</button>
     </td>
+    <td>
+        <button onclick="listLibraryContents()" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-button--accent">List Library Contents</button>
+    </td>
   </tr>
   <tr>
     <td>
       <div id="divAlbums"></div>
+    </td>
+    <td>
+      <div id="divLibraryContents"></div>
     </td>
   </tr>
 </table>
