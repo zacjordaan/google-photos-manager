@@ -4,10 +4,11 @@
 
 # OAuthPS
 $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "https://console.developers.google.com/apis/credentials?project=gpm-20180408"
+$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
 $SCOPES        = "https://www.googleapis.com/auth/photoslibrary"
 $ERR           = $null
-$DEST_ALBUMS   = "C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
+$DEST_ALBUMS   = "C:\Users\zacjordaan\Desktop\albums.csv" #"C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
+$HASH_ALBUMS   = @{} #https://kevinmarquette.github.io/2016-11-06-powershell-hashtable-everything-you-wanted-to-know-about/
 
 <#
 $authcode      = $null
@@ -26,7 +27,7 @@ function GetAuthURL([string]$clientId, [string]$scopes) {
 
 function ExchangeCode([string]$clientId, [string]$secret, [string]$code){
     
-    # Exchange Refresh Token for Access Token�
+    # Exchange Refresh Token for Access Token
     # Access Tokens have a limited lifetime (approximately 60 minutes) whereas Refresh Tokens last indefinitely, except for the circumstances defined at https://developers.google.com/identity/protocols/OAuth2#expiration
     # The Access Token is what you will hardcode into your script, configuring the script to hit the Google Identity Platform to request a Refresh Token on execution. 
 
@@ -102,7 +103,7 @@ function Get-GAuthToken([string]$clientId, [string]$secret, [string]$refreshToke
 
 
 # Clear screen
-cls
+Clear-Host
 
 
 # -----------------------------------------------------------------------------
@@ -122,11 +123,11 @@ if($authcode -eq $null){
 
     return
 
-    $authcode = "4/AABG8uwugtQFpoOMJ0D3uZo2x3dVhabB49FkHasPZl7AH25PfDpaiFw" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
+    $authcode = "4/AADaPRDE2phr2yN1DsGN8YuW9ltzhIbh4BHa_uHdRlvSVjoaPsmALp0" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
 }
 
 
-# Get initial token and Exchange Refresh Token for Access Token�
+# Get initial token and Exchange Refresh Token for Access Token
 if($token -eq $null){
     write-host "Exchanging Refresh Token for Access Token..." -ForegroundColor yellow
     $token = ExchangeCode $CLIENTID $CLIENTSECRET $authcode
@@ -147,7 +148,8 @@ if($token -eq $null){
 if($access_token -eq $null){
     Write-Host "Access Token required" -ForegroundColor Red
     return
-} else{
+} 
+else{
     write-host $access_token -ForegroundColor Cyan
     write-host "Access Token OK... I think!" -ForegroundColor Green
     write-host
@@ -200,8 +202,23 @@ try {
         #$albums | Select title, totalMediaItems | Format-Table -auto
         #>
 
+        #<# Add to hashtable
+        ForEach($album in $albums){
+            $str = "$($album.title) ($($album.totalMediaItem))"
+            #$objAlbum = [pscustomobject] [ordered] @{
+            #                                        id                = $album.id;
+            #                                        title             = $album.title; 
+            #                                        productUrl        = $album.productUrl; 
+            #                                        coverPhotoBaseUrl = $album.coverPhotoBaseUrl;  
+            #                                        isWriteable       = $album.isWriteable;
+            #                                        totalMediaItems   = $album.totalMediaItem
+            #                                        }
+            $HASH_ALBUMS.Add($album.id, $str)
+        }
+        #>
+
         #<# Append (export) results to csv (selected properties only)
-        $albums | Select id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation �append �path $DEST_ALBUMS
+        $albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
         #>
 
     }
@@ -217,6 +234,9 @@ write-host
 write-host "----------------------------------------" -ForegroundColor Yellow
 write-host $total_albums_count "Albums in Total" -ForegroundColor Yellow
 write-host "----------------------------------------" -ForegroundColor Yellow
+
+
+write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
 
 
 
