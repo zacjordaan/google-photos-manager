@@ -2,9 +2,15 @@
 #https://gist.github.com/LindaLawton/55115de5e8b366be3969b24884f30a39
 
 
+$Global:clientreq = ConvertFrom-Json @"
+{
+"redirect_uris" : [ "https://accounts.google.com/o/oauth2/approval" ]
+}
+"@
+
 # OAuthPS
 $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
+$CLIENTSECRET  = "XXX"
 $SCOPES        = "https://www.googleapis.com/auth/photoslibrary"
 $ERR           = $null
 $DEST_ALBUMS   = "C:\Users\zacjordaan\Desktop\albums.csv" #"C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
@@ -18,6 +24,9 @@ $refresh_token = $null
 $token         = $null
 #>
 
+# -----------------------------------------------------------------------------
+# OAUTH FUNCTIONS
+# -----------------------------------------------------------------------------
 
 function GetAuthURL([string]$clientId, [string]$scopes) {
     $hold = "https://accounts.google.com/o/oauth2/auth?client_id=$clientId&redirect_uri=urn:ietf:wg:oauth:2.0:oob&scope=$scopes&response_type=code";
@@ -95,11 +104,209 @@ function Get-GAuthToken([string]$clientId, [string]$secret, [string]$refreshToke
 }
 
 
+# WIP!
+# https://github.com/globalsign/OAuth-2.0-client-examples/blob/master/PowerShell/Powershell-example.ps1
+function GetAuthCode([string]$authurl){
+
+    write-host "GetAuthCode()" -ForegroundColor Gray
+
+    # windows forms dependencies
+    # https://blogs.technet.microsoft.com/stephap/2012/04/23/building-forms-with-powershell-part-1-the-form/
+    Add-Type -AssemblyName System.Windows.Forms 
+    Add-Type -AssemblyName System.Web
+
+    # create window for embedded browser
+    $form = New-Object Windows.Forms.Form
+    $form.Text = "GetAuthCode()"
+    $form.Width = 600
+    $form.Height = 800
+    $form.StartPosition = "CenterScreen"
+    $icon = New-Object system.drawing.icon ("$PSScriptRoot\img\star.ico") #[system.drawing.icon]::ExtractAssociatedIcon($PSHOME + "\powershell.exe")
+    $form.Icon = $icon
+    
+    # add a web browser to the form
+    $web = New-Object Windows.Forms.WebBrowser
+    $web.Size = $form.ClientSize
+    $web.Anchor = "Left,Top,Right,Bottom"
+    $form.Controls.Add($web)
+
+    # global for collecting authorization code response
+    $Global:redirect_uri = $null
+
+    # add handler for the embedded browser's Navigating event
+    $web.add_Navigating({
+        write-host "Navigating to: $($_.Url)" -ForegroundColor Cyan
+        write-host "Url.Authority:"$_.Url.Authority -ForegroundColor Gray
+        write-host "Url.AbsolutePath:"$_.Url.AbsolutePath -ForegroundColor Gray
+        
+        # detect when browser is about to fetch redirect_uri
+        $uri = [uri] $Global:clientreq.redirect_uris[0]
+
+        if($_.Url.Authority -eq $uri.Authority -And $_.Url.AbsolutePath -eq $uri.AbsolutePath) {
+            # collect authorization response in a global
+            $Global:redirect_uri = $_.Url
+
+            # cancel event and close browser window
+            $form.DialogResult = "OK"
+            $form.Close()
+            $_.Cancel = $true
+        }
+
+    })
+
+    # send authorization code request
+    write-host "Sending browser to:"
+    write-host $authurl -ForegroundColor Yellow
+    $web.Navigate($authurl)
+
+    # show browser window, wait for window to close
+    if($form.ShowDialog() -ne "OK") {
+        write-host "WebBrowser: Canceled" -ForegroundColor Gray
+        return
+    }
+    if(-not $Global:redirect_uri) {
+        write-host "WebBrowser: redirect_uri is null" -ForegroundColor Gray
+        return
+    }
+
+
+    # decode query string of authorization code response
+    $response = [Web.HttpUtility]::ParseQueryString($Global:redirect_uri.Query)
+    if(-not $response.Get("code")) {
+        write-host "WebBrowser: authorization code is null" -ForegroundColor Gray
+        return
+    }
+
+
+}
+
+
+# -----------------------------------------------------------------------------
+# API FUNCTIONS
+# -----------------------------------------------------------------------------
+
+
+function ListAlbums([string]$bearer_token){
+#https://developers.google.com/photos/library/guides/list#listing-albums
+
+    write-host "ListAlbums()" -ForegroundColor Gray
+
+    $i = 0
+    $nextPageToken = ""
+    $headers = @{"Authorization" = "Bearer $bearer_token";} 
+    $ht_albums = @{}
+
+    try {
+
+        while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
+            $i++
+            #Write-Host $i
+
+            # The default and recommended page size when listing albums is 20 albums, with a maximum of 50 albums. HAS BUG!
+            $url = "https://photoslibrary.googleapis.com/v1/albums?pageSize=50"
+            if($nextPageToken -ne ""){
+                $url += "&pageToken=$nextPageToken"
+            }
+
+            # Execute request
+            #write-host $url -ForegroundColor Cyan
+            $response = Invoke-RestMethod -Uri $url -Method Get -Headers $headers
+            #write-host ($response | ConvertTo-JSON) -ForegroundColor Gray
+
+            $nextPageToken = $response.nextPageToken
+            $albums = $response.albums 
+
+            #write-host $i")`t" $albums.Count "Albums returned by this request"
+            
+            # Print results to console (selected properties only)
+            #$albums | Select title, totalMediaItems | Format-Table -auto
+
+            # Add to hashtable
+            ForEach($album in $albums){
+                #$str = "$($album.title) ($($album.totalMediaItems))"
+                $ht_albums.Add($album.id, $album)
+            }
+        }
+
+    } catch {
+        $script:ERR = $_
+        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
+        Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
+    }
+
+
+    write-host "ht_albums contains: $($ht_albums.Count) values" -ForegroundColor Gray
+    return $ht_albums
+}
+
+function ListAlbumContents([string]$albumId){
+
+    $i = 0
+    $nextPageToken = ""
+    $headers = @{"Authorization" = "Bearer $access_token";} 
+    $total_mediaItems_count = 0 
+
+    try {
+
+        while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
+            $i++
+
+            $url = "https://photoslibrary.googleapis.com/v1/mediaItems:search?albumId=$albumId&pageSize=500" #default: 100, max: 500
+
+            if($nextPageToken -ne ""){
+                $url += "&pageToken=$nextPageToken"
+            }
+
+            # Execute request
+            #write-host $url -ForegroundColor Cyan
+            $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers
+            #write-host ($response | ConvertTo-JSON) -ForegroundColor Gray
+
+            $nextPageToken = $response.nextPageToken
+        
+            $mediaItems = $response.mediaItems 
+            write-host $i")`t" $mediaItems.Count "mediaItems Found"
+            $total_mediaItems_count += $mediaItems.Count
+
+            # Print results to console (selected properties only)
+            #$mediaItems | Select-Object id, description, mimeType | Format-Table -auto
+            #@{N="MediaTypeP";E={$_.mediaMetadata.photo}},
+            #https://stackoverflow.com/questions/29595518/is-the-following-possible-in-powershell-select-object-property-subproperty 
+
+
+            ## Add to hashtable
+            #ForEach($album in $albums){
+            #    $str = "$($album.title) ($($album.totalMediaItems))"
+            #    $HASH_ALBUMS.Add($album.id, $str)
+            #}
+            
+
+            # Append (export) results to csv (selected properties only)
+            #$albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
+
+        }
+
+    } catch {
+        $script:ERR = $_
+        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
+        Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
+    }
+
+
+    write-host $total_mediaItems_count "MediaItems in Album" -ForegroundColor Yellow
+    #write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
+
+}
 
 
 
 
 
+
+
+# -----------------------------------------------------------------------------
+# MAIN
+# -----------------------------------------------------------------------------
 
 
 # Clear screen
@@ -110,9 +317,16 @@ Clear-Host
 # OAUTH
 # -----------------------------------------------------------------------------
 
+#$authurl  = GetAuthURL $CLIENTID $SCOPES
+#GetAuthCode $authurl
+#return
+
+
+
 # Get OAuth2 Authorization Code
 if($authcode -eq $null){
     $authurl  = GetAuthURL $CLIENTID $SCOPES
+
     write-host "Manually execute this request in your browser and then hardcode the return value to the authcode variable:" -ForegroundColor yellow
     write-host
     write-host $authurl
@@ -123,7 +337,7 @@ if($authcode -eq $null){
 
     return
 
-    $authcode = "4/AADaPRDE2phr2yN1DsGN8YuW9ltzhIbh4BHa_uHdRlvSVjoaPsmALp0" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
+    $authcode = "4/AAAp6k47oyYiqyhSUoV59uXmi4FyOeZR54VtkVDZD8VC-GnpGORQ6HE" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
 }
 
 
@@ -163,85 +377,181 @@ else{
 # LIST ALBUMS
 # https://developers.google.com/photos/library/guides/list#listing-albums
 # -----------------------------------------------------------------------------
+if(1 -eq 0){
+    $i = 0
+    $nextPageToken = ""
+    $headers = @{"Authorization" = "Bearer $access_token";} 
+    $total_albums_count = 0 #602 Albums in Total as at 05 Jul 2018
+    try {
 
-$i = 0
-$nextPageToken = ""
-$headers = @{"Authorization" = "Bearer $access_token";} 
-$total_albums_count = 0 #602 Albums in Total as at 05 Jul 2018
-try {
 
+        while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
+            $i++
+            #Write-Host $i
 
-    while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
-        $i++
-        #Write-Host $i
+            # The default and recommended page size when listing albums is 20 albums, with a maximum of 50 albums. HAS BUG!
+            $url = "https://photoslibrary.googleapis.com/v1/albums?pageSize=50"
 
-        # The default and recommended page size when listing albums is 20 albums, with a maximum of 50 albums. HAS BUG!
-        $url = "https://photoslibrary.googleapis.com/v1/albums?pageSize=50"
+            if($nextPageToken -ne ""){
+                $url += "&pageToken=$nextPageToken"
+            }
 
-        if($nextPageToken -ne ""){
-            $url += "&pageToken=$nextPageToken"
-        }
+            # Execute request
+            #write-host $url -ForegroundColor Cyan
+            $response = Invoke-RestMethod -Uri $url -Method Get -Headers $headers
+            #write-host ($response | ConvertTo-JSON) -ForegroundColor Gray
 
-        # Execute request
-        #write-host $url -ForegroundColor Cyan
-        $response = Invoke-RestMethod -Uri $url -Method Get -Headers $headers
-        #write-host ($response | ConvertTo-JSON) -ForegroundColor Gray
-
-        $nextPageToken = $response.nextPageToken
-        #$nextPageToken = ""
-        #if($nextPageToken -eq ""){
-        #    $nextPageToken = $null
-        #}
+            $nextPageToken = $response.nextPageToken
         
-        $albums = $response.albums 
-        write-host $i")`t" $albums.Count "Albums Found"
-        $total_albums_count += $albums.Count
-        #$albums | Select title, totalMediaItems | Format-Table -auto
+            $albums = $response.albums 
+            write-host $i")`t" $albums.Count "Albums Found"
+            $total_albums_count += $albums.Count
+            #$albums | Select title, totalMediaItems | Format-Table -auto
 
-        <# Print results to console (selected properties only)
-        #$albums | Select title, totalMediaItems | Format-Table -auto
-        #>
+            <# Print results to console (selected properties only)
+            #$albums | Select title, totalMediaItems | Format-Table -auto
+            #>
 
-        #<# Add to hashtable
-        ForEach($album in $albums){
-            $str = "$($album.title) ($($album.totalMediaItem))"
-            #$objAlbum = [pscustomobject] [ordered] @{
-            #                                        id                = $album.id;
-            #                                        title             = $album.title; 
-            #                                        productUrl        = $album.productUrl; 
-            #                                        coverPhotoBaseUrl = $album.coverPhotoBaseUrl;  
-            #                                        isWriteable       = $album.isWriteable;
-            #                                        totalMediaItems   = $album.totalMediaItem
-            #                                        }
-            $HASH_ALBUMS.Add($album.id, $str)
+            #<# Add to hashtable
+            ForEach($album in $albums){
+                $str = "$($album.title) ($($album.totalMediaItems))"
+                $HASH_ALBUMS.Add($album.id, $str)
+            }
+            #>
+
+            <# Append (export) results to csv (selected properties only)
+            $albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
+            #>
+
         }
-        #>
 
-        #<# Append (export) results to csv (selected properties only)
-        $albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
-        #>
-
+    } catch {
+        $script:ERR = $_
+        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
+        Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
     }
 
-} catch {
-    $script:ERR = $_
-    Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
-    Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
+
+    write-host
+    write-host "----------------------------------------" -ForegroundColor Yellow
+    write-host $total_albums_count "Albums in Total" -ForegroundColor Yellow
+    write-host "----------------------------------------" -ForegroundColor Yellow
+
+
+    write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
 }
 
 
-write-host
-write-host "----------------------------------------" -ForegroundColor Yellow
-write-host $total_albums_count "Albums in Total" -ForegroundColor Yellow
-write-host "----------------------------------------" -ForegroundColor Yellow
+# Refresh if necessary???
+#$ht_albums = ListAlbums $access_token
+
+<#
+foreach($key in $ht_albums.keys)
+{
+    #$message = '{0} is {1} years old' -f $key, $ageList[$key]
+    #Write-Output $message
+    $album = $ht_albums[$key]
+    $album.title
+}
+#>
+# OR...
+#<#
+# enumerator gives each key/value pair one after another...
+$ht_albums.GetEnumerator() | ForEach-Object{
+    #$_.key
+    #$_.value
+    $album = $_.value
+    $album.title
+}
+#>
 
 
-write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
 
 
 
 
-<# SCRATCHINGS
+# -----------------------------------------------------------------------------
+# LIST LIBRARY CONTENTS
+# https://developers.google.com/photos/library/guides/list#listing-library-contents
+# * Excludes archived and deleted items
+# * Media shared with a user that is not added to the library isn't listed
+# -----------------------------------------------------------------------------
+if(1 -eq 0){
+    $i = 0
+    $nextPageToken = ""
+    $headers = @{"Authorization" = "Bearer $access_token";} 
+    $total_mediaItems_count = 0 
+    try {
+
+
+        while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
+            $i++
+            #Write-Host $i
+
+            # The default and recommended page size when listing albums is 20 albums, with a maximum of 50 albums. HAS BUG!
+            $url = "https://photoslibrary.googleapis.com/v1/mediaItems:search?pageSize=3"
+
+            if($nextPageToken -ne ""){
+                $url += "&pageToken=$nextPageToken"
+            }
+
+            # Execute request
+            #write-host $url -ForegroundColor Cyan
+            $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers
+            #write-host ($response | ConvertTo-JSON) -ForegroundColor Gray
+
+            $nextPageToken = $response.nextPageToken
+        
+            $mediaItems = $response.mediaItems 
+            write-host $i")`t" $mediaItems.Count "mediaItems Found"
+            $total_mediaItems_count += $mediaItems.Count
+
+            # Print results to console (selected properties only)
+            $mediaItems | Select-Object id, description, mimeType | Format-Table -auto
+            #@{N="MediaTypeP";E={$_.mediaMetadata.photo}},
+            #https://stackoverflow.com/questions/29595518/is-the-following-possible-in-powershell-select-object-property-subproperty 
+
+
+            ## Add to hashtable
+            #ForEach($album in $albums){
+            #    $str = "$($album.title) ($($album.totalMediaItems))"
+            #    $HASH_ALBUMS.Add($album.id, $str)
+            #}
+            
+
+            # Append (export) results to csv (selected properties only)
+            #$albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
+
+        }
+
+    } catch {
+        $script:ERR = $_
+        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
+        Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
+    }
+
+
+    write-host
+    write-host "----------------------------------------" -ForegroundColor Yellow
+    write-host $total_mediaItems_count "MediaItems in Total" -ForegroundColor Yellow
+    write-host "----------------------------------------" -ForegroundColor Yellow
+
+
+#write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
+}
+
+
+
+
+write-host "`nFIN" -ForegroundColor Yellow
+
+
+
+
+
+
+#SCRATCHINGS...
+<# 
 
     ForEach($album in $albums){
         
@@ -251,9 +561,8 @@ write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
                                                     productUrl = $album.productUrl; 
                                                     coverPhotoBaseUrl = $album.coverPhotoBaseUrl;  
                                                     isWriteable = $album.isWriteable;
-                                                    totalMediaItems = $album.totalMediaItem
+                                                    totalMediaItems = $album.totalMediaItems
                                                     }
-
 
         #write-host $album
 
