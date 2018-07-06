@@ -10,7 +10,7 @@ $Global:clientreq = ConvertFrom-Json @"
 
 # OAuthPS
 $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "XXX"
+$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
 $SCOPES        = "https://www.googleapis.com/auth/photoslibrary"
 $ERR           = $null
 $DEST_ALBUMS   = "C:\Users\zacjordaan\Desktop\albums.csv" #"C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
@@ -186,7 +186,7 @@ function GetAuthCode([string]$authurl){
 # -----------------------------------------------------------------------------
 
 
-function ListAlbums([string]$bearer_token){
+function GetAlbums([string]$bearer_token){
 #https://developers.google.com/photos/library/guides/list#listing-albums
 
     write-host "ListAlbums()" -ForegroundColor Gray
@@ -239,12 +239,12 @@ function ListAlbums([string]$bearer_token){
     return $ht_albums
 }
 
-function ListAlbumContents([string]$albumId){
+function GetAlbumContents([string]$bearer_token, [string]$albumId){
 
     $i = 0
     $nextPageToken = ""
-    $headers = @{"Authorization" = "Bearer $access_token";} 
-    $total_mediaItems_count = 0 
+    $headers = @{"Authorization" = "Bearer $bearer_token";} 
+    $ht_mediaItems = @{}
 
     try {
 
@@ -265,25 +265,22 @@ function ListAlbumContents([string]$albumId){
             $nextPageToken = $response.nextPageToken
         
             $mediaItems = $response.mediaItems 
-            write-host $i")`t" $mediaItems.Count "mediaItems Found"
-            $total_mediaItems_count += $mediaItems.Count
+
+            # Add to hashtable
+            ForEach($mediaItem in $mediaItems){
+                $ht_mediaItems.Add($mediaItem.id, $mediaItem)
+            }
 
             # Print results to console (selected properties only)
             #$mediaItems | Select-Object id, description, mimeType | Format-Table -auto
             #@{N="MediaTypeP";E={$_.mediaMetadata.photo}},
             #https://stackoverflow.com/questions/29595518/is-the-following-possible-in-powershell-select-object-property-subproperty 
-
-
-            ## Add to hashtable
-            #ForEach($album in $albums){
-            #    $str = "$($album.title) ($($album.totalMediaItems))"
-            #    $HASH_ALBUMS.Add($album.id, $str)
-            #}
-            
+          
 
             # Append (export) results to csv (selected properties only)
             #$albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
-
+            
+            
         }
 
     } catch {
@@ -293,9 +290,8 @@ function ListAlbumContents([string]$albumId){
     }
 
 
-    write-host $total_mediaItems_count "MediaItems in Album" -ForegroundColor Yellow
-    #write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
-
+    write-host "ht_mediaItems contains: $($ht_mediaItems.Count) values" -ForegroundColor Gray
+    return $ht_mediaItems
 }
 
 
@@ -337,7 +333,7 @@ if($authcode -eq $null){
 
     return
 
-    $authcode = "4/AAAp6k47oyYiqyhSUoV59uXmi4FyOeZR54VtkVDZD8VC-GnpGORQ6HE" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
+    $authcode = "4/AADkEBtcQ7c5qJAixCpzz9ygC6Sw32MHhBJaH2HEQ6vP_Cep_Az8D4o" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
 }
 
 
@@ -364,7 +360,7 @@ if($access_token -eq $null){
     return
 } 
 else{
-    write-host $access_token -ForegroundColor Cyan
+    #write-host $access_token -ForegroundColor Cyan
     write-host "Access Token OK... I think!" -ForegroundColor Green
     write-host
 }
@@ -443,7 +439,8 @@ if(1 -eq 0){
 
 
 # Refresh if necessary???
-#$ht_albums = ListAlbums $access_token
+write-host "Assuming ht_albums already populated" -ForegroundColor Yellow
+#$ht_albums = GetAlbums $access_token
 
 <#
 foreach($key in $ht_albums.keys)
@@ -451,23 +448,36 @@ foreach($key in $ht_albums.keys)
     #$message = '{0} is {1} years old' -f $key, $ageList[$key]
     #Write-Output $message
     $album = $ht_albums[$key]
-    $album.title
+    $album.title + "($key)"
 }
 #>
 # OR...
-#<#
+<#
 # enumerator gives each key/value pair one after another...
 $ht_albums.GetEnumerator() | ForEach-Object{
     #$_.key
     #$_.value
     $album = $_.value
-    $album.title
+    $album.title + "($_.key)"
 }
 #>
 
+#20170617 Father's Day Metal Forge(AGj1epXRfU_0py7aGdkqoeLtfUXrNRwGUEpZpPe8A_2ZIk2kUT_K)
+$albumId = "AGj1epXRfU_0py7aGdkqoeLtfUXrNRwGUEpZpPe8A_2ZIk2kUT_K"
 
+$ht_mediaItems = GetAlbumContents $access_token $albumId
+#<#
+$i=0
+foreach($key in $ht_mediaItems.keys)
+{
+    $i++
+    $mediaItem = $ht_mediaItems[$key]
 
-
+    write-host $i $mediaItem.mimeType $mediaItem.mediaMetadata.photo
+    #$mediaItem.description + "($key)"
+    
+}
+#>
 
 
 # -----------------------------------------------------------------------------
