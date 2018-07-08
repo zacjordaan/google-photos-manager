@@ -14,7 +14,9 @@ $CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
 $SCOPES        = "https://www.googleapis.com/auth/photoslibrary"
 $ERR           = $null
 $DEST_ALBUMS   = "C:\Users\zacjordaan\Desktop\albums.csv" #"C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
-$HASH_ALBUMS   = @{} #https://kevinmarquette.github.io/2016-11-06-powershell-hashtable-everything-you-wanted-to-know-about/
+
+#https://kevinmarquette.github.io/2016-11-06-powershell-hashtable-everything-you-wanted-to-know-about/
+$HASH_ALBUMS   = @{}
 
 <#
 $authcode      = $null
@@ -239,7 +241,7 @@ function GetAlbums([string]$bearer_token){
     return $ht_albums
 }
 
-function GetAlbumContents([string]$bearer_token, [string]$albumId){
+function GetMediaItems([string]$bearer_token, [string]$albumId){
 
     $i = 0
     $nextPageToken = ""
@@ -248,10 +250,14 @@ function GetAlbumContents([string]$bearer_token, [string]$albumId){
 
     try {
 
-        while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
+        while($nextPageToken -ne $null -And $i -lt 5){ # <-- SAFETY LIMIT VARIABLE i HERE
             $i++
 
-            $url = "https://photoslibrary.googleapis.com/v1/mediaItems:search?albumId=$albumId&pageSize=500" #default: 100, max: 500
+            $url = "https://photoslibrary.googleapis.com/v1/mediaItems:search?pageSize=500" #default: 100, max: 500
+
+            if($albumId -ne $null){
+                $url += "&albumId=$albumId"
+            }
 
             if($nextPageToken -ne ""){
                 $url += "&pageToken=$nextPageToken"
@@ -279,8 +285,6 @@ function GetAlbumContents([string]$bearer_token, [string]$albumId){
 
             # Append (export) results to csv (selected properties only)
             #$albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
-            
-            
         }
 
     } catch {
@@ -333,7 +337,7 @@ if($authcode -eq $null){
 
     return
 
-    $authcode = "4/AADkEBtcQ7c5qJAixCpzz9ygC6Sw32MHhBJaH2HEQ6vP_Cep_Az8D4o" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
+    $authcode = "4/AACjxrsN7lQl2_d7eRv8tfMGc3WAVdhYAgt3Pgvfa9B_VVvxunYFMB4" # Code from web browser link above... AFTER PASTING - HIGHLIGHT AND F8 TO SET THE VARIABLE!
 }
 
 
@@ -374,111 +378,53 @@ else{
 # https://developers.google.com/photos/library/guides/list#listing-albums
 # -----------------------------------------------------------------------------
 if(1 -eq 0){
-    $i = 0
-    $nextPageToken = ""
-    $headers = @{"Authorization" = "Bearer $access_token";} 
-    $total_albums_count = 0 #602 Albums in Total as at 05 Jul 2018
-    try {
 
+    # Refresh if necessary???
+    #write-host "Assuming ht_albums already populated" -ForegroundColor Yellow
+    $ht_albums = GetAlbums $access_token
 
-        while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
-            $i++
-            #Write-Host $i
-
-            # The default and recommended page size when listing albums is 20 albums, with a maximum of 50 albums. HAS BUG!
-            $url = "https://photoslibrary.googleapis.com/v1/albums?pageSize=50"
-
-            if($nextPageToken -ne ""){
-                $url += "&pageToken=$nextPageToken"
-            }
-
-            # Execute request
-            #write-host $url -ForegroundColor Cyan
-            $response = Invoke-RestMethod -Uri $url -Method Get -Headers $headers
-            #write-host ($response | ConvertTo-JSON) -ForegroundColor Gray
-
-            $nextPageToken = $response.nextPageToken
-        
-            $albums = $response.albums 
-            write-host $i")`t" $albums.Count "Albums Found"
-            $total_albums_count += $albums.Count
-            #$albums | Select title, totalMediaItems | Format-Table -auto
-
-            <# Print results to console (selected properties only)
-            #$albums | Select title, totalMediaItems | Format-Table -auto
-            #>
-
-            #<# Add to hashtable
-            ForEach($album in $albums){
-                $str = "$($album.title) ($($album.totalMediaItems))"
-                $HASH_ALBUMS.Add($album.id, $str)
-            }
-            #>
-
-            <# Append (export) results to csv (selected properties only)
-            $albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
-            #>
-
-        }
-
-    } catch {
-        $script:ERR = $_
-        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
-        Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
+    foreach($key in $ht_albums.keys)
+    {
+        #$message = '{0} is {1} years old' -f $key, $ageList[$key]
+        #Write-Output $message
+        $album = $ht_albums[$key]
+        $album.title + "($key)"
     }
 
+    # OR...
+    # enumerator gives each key/value pair one after another...
+    #$ht_albums.GetEnumerator() | ForEach-Object{
+    #    #$_.key
+    #    #$_.value
+    #    $album = $_.value
+    #    $album.title + "($_.key)"
+    #}
 
-    write-host
-    write-host "----------------------------------------" -ForegroundColor Yellow
-    write-host $total_albums_count "Albums in Total" -ForegroundColor Yellow
-    write-host "----------------------------------------" -ForegroundColor Yellow
-
-
-    write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
 }
 
 
-# Refresh if necessary???
-write-host "Assuming ht_albums already populated" -ForegroundColor Yellow
-#$ht_albums = GetAlbums $access_token
+# -----------------------------------------------------------------------------
+# LIST ALBUM CONTENTS
+# -----------------------------------------------------------------------------
+if(1 -eq 0){
 
-<#
-foreach($key in $ht_albums.keys)
-{
-    #$message = '{0} is {1} years old' -f $key, $ageList[$key]
-    #Write-Output $message
-    $album = $ht_albums[$key]
-    $album.title + "($key)"
-}
-#>
-# OR...
-<#
-# enumerator gives each key/value pair one after another...
-$ht_albums.GetEnumerator() | ForEach-Object{
-    #$_.key
-    #$_.value
-    $album = $_.value
-    $album.title + "($_.key)"
-}
-#>
+    $albumId = "AGj1epXRfU_0py7aGdkqoeLtfUXrNRwGUEpZpPe8A_2ZIk2kUT_K" #20170617 Father's Day Metal Forge
+    $ht_mediaItems = GetMediaItems $access_token $albumId
 
-#20170617 Father's Day Metal Forge(AGj1epXRfU_0py7aGdkqoeLtfUXrNRwGUEpZpPe8A_2ZIk2kUT_K)
-$albumId = "AGj1epXRfU_0py7aGdkqoeLtfUXrNRwGUEpZpPe8A_2ZIk2kUT_K"
+    $i=0
+    foreach($key in $ht_mediaItems.keys)
+    {
+        $i++
+        $mediaItem = $ht_mediaItems[$key]
 
-$ht_mediaItems = GetAlbumContents $access_token $albumId
-#<#
-$i=0
-foreach($key in $ht_mediaItems.keys)
-{
-    $i++
-    $mediaItem = $ht_mediaItems[$key]
-
-    write-host $i $mediaItem.mimeType $mediaItem.mediaMetadata.photo
-    #$mediaItem.description + "($key)"
+        write-host $i $mediaItem.mimeType $mediaItem.mediaMetadata.photo
+        #Write-Host $mediaItem.mediaMetadata.creationTime
+        #return
+        #$mediaItem.description + "($key)"
     
-}
-#>
+    }
 
+}
 
 # -----------------------------------------------------------------------------
 # LIST LIBRARY CONTENTS
@@ -486,68 +432,25 @@ foreach($key in $ht_mediaItems.keys)
 # * Excludes archived and deleted items
 # * Media shared with a user that is not added to the library isn't listed
 # -----------------------------------------------------------------------------
-if(1 -eq 0){
-    $i = 0
-    $nextPageToken = ""
-    $headers = @{"Authorization" = "Bearer $access_token";} 
-    $total_mediaItems_count = 0 
-    try {
+if(1 -eq 1){
 
+    $albumId = $null
+    $ht_mediaItems = GetMediaItems $access_token $albumId #<-- temp disabled
 
-        while($nextPageToken -ne $null -And $i -lt 2){ # <-- SAFETY LIMIT VARIABLE i HERE
-            $i++
-            #Write-Host $i
+    $i=0
+    foreach($key in $ht_mediaItems.keys)
+    {
+        $i++
+        $mediaItem = $ht_mediaItems[$key]
 
-            # The default and recommended page size when listing albums is 20 albums, with a maximum of 50 albums. HAS BUG!
-            $url = "https://photoslibrary.googleapis.com/v1/mediaItems:search?pageSize=3"
+        #write-host $i $mediaItem.mimeType $mediaItem.mediaMetadata.photo
+        Write-Host $mediaItem.MediaMetadata
 
-            if($nextPageToken -ne ""){
-                $url += "&pageToken=$nextPageToken"
-            }
-
-            # Execute request
-            #write-host $url -ForegroundColor Cyan
-            $response = Invoke-RestMethod -Uri $url -Method Post -Headers $headers
-            #write-host ($response | ConvertTo-JSON) -ForegroundColor Gray
-
-            $nextPageToken = $response.nextPageToken
-        
-            $mediaItems = $response.mediaItems 
-            write-host $i")`t" $mediaItems.Count "mediaItems Found"
-            $total_mediaItems_count += $mediaItems.Count
-
-            # Print results to console (selected properties only)
-            $mediaItems | Select-Object id, description, mimeType | Format-Table -auto
-            #@{N="MediaTypeP";E={$_.mediaMetadata.photo}},
-            #https://stackoverflow.com/questions/29595518/is-the-following-possible-in-powershell-select-object-property-subproperty 
-
-
-            ## Add to hashtable
-            #ForEach($album in $albums){
-            #    $str = "$($album.title) ($($album.totalMediaItems))"
-            #    $HASH_ALBUMS.Add($album.id, $str)
-            #}
-            
-
-            # Append (export) results to csv (selected properties only)
-            #$albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
-
-        }
-
-    } catch {
-        $script:ERR = $_
-        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
-        Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
+        #return
+        #$mediaItem.description + "($key)"
+    
     }
 
-
-    write-host
-    write-host "----------------------------------------" -ForegroundColor Yellow
-    write-host $total_mediaItems_count "MediaItems in Total" -ForegroundColor Yellow
-    write-host "----------------------------------------" -ForegroundColor Yellow
-
-
-#write-host "HASH_ALBUMS contains: $($HASH_ALBUMS.Count) values"
 }
 
 
