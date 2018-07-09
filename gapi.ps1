@@ -10,7 +10,7 @@ $Global:clientreq = ConvertFrom-Json @"
 
 # OAuthPS
 $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
+$CLIENTSECRET  = "XXX"
 $SCOPES        = "https://www.googleapis.com/auth/photoslibrary"
 $ERR           = $null
 $DEST_ALBUMS   = "C:\Users\zacjordaan\Desktop\albums.csv" #"C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
@@ -432,7 +432,7 @@ if(1 -eq 0){
 # * Excludes archived and deleted items
 # * Media shared with a user that is not added to the library isn't listed
 # -----------------------------------------------------------------------------
-if(1 -eq 1){
+if(1 -eq 0){
 
     $albumId = $null
     $ht_mediaItems = GetMediaItems $access_token $albumId #<-- temp disabled
