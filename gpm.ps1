@@ -1,32 +1,19 @@
-#https://monteledwards.com/2017/03/05/powershell-oauth-downloadinguploading-to-google-drive-via-drive-api/
-#https://gist.github.com/LindaLawton/55115de5e8b366be3969b24884f30a39
+$Global:clientreq = ConvertFrom-Json "{'redirect_uris' : [ 'https://accounts.google.com/o/oauth2/approval' ]}"
 
-#$psISE.CurrentFile.Editor.ToggleOutliningExpansion()
-#Or use Ctrl+M to collapse/expand in the ISE
-
-#region GLOBAL SETTINGS
-
-    $Global:clientreq = ConvertFrom-Json "{'redirect_uris' : [ 'https://accounts.google.com/o/oauth2/approval' ]}"
-
-    # OAuthPS
-    $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-    $CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
-    $SCOPES        = "https://www.googleapis.com/auth/photoslibrary https://picasaweb.google.com/data"
-    $ERR           = $null
-    $DEST_ALBUMS   = "C:\Users\zacjordaan\Desktop\albums.csv" #"C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
-    $REFRESH_TOKEN = "1/PxJtMpSmxjoMJN7Vnfi2o5TWACWwMSNkmuC6jZIqOq1V__5zsJTXvEd_ccLGAudk"
-
-    #https://kevinmarquette.github.io/2016-11-06-powershell-hashtable-everything-you-wanted-to-know-about/
-    $HASH_ALBUMS   = @{}
+# OAuthPS
+$CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
+$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
+$SCOPES        = "https://www.googleapis.com/auth/photoslibrary https://picasaweb.google.com/data"
+$ACCESS_TOKEN  = $null
+$REFRESH_TOKEN = $null
+$ERR           = $null
+$DEST          = "C:\Users\ueszjv\Desktop\albums.csv"
+#$DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
 
 
-    #$authcode      = $null
-    #$token         = $null
-    #$access_token  = $null
-    #$refresh_token = $null
-    #$token         = $null
 
-#endregion
+
+
 
 #region OAUTH FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -68,55 +55,20 @@
         return $hold;
     }
 
-    function ExchangeCode([string]$clientId, [string]$secret, [string]$code){
-    
-        # Exchange Refresh Token for Access Token
-        # Access Tokens have a limited lifetime (approximately 60 minutes) whereas Refresh Tokens last indefinitely, except for the circumstances defined at https://developers.google.com/identity/protocols/OAuth2#expiration
-        # The Access Token is what you will hardcode into your script, configuring the script to hit the Google Identity Platform to request a Refresh Token on execution. 
-
-        $grantType   = "authorization_code"
-        $redirectURI = "urn:ietf:wg:oauth:2.0:oob";
-        $parms       = "code=$code&client_id=$clientId&client_secret=$secret&redirect_uri=$redirectURI&grant_type=$grantType";
-
-        try {
-            $response = Invoke-RestMethod -Uri "https://accounts.google.com/o/oauth2/token" -Method Post -Body $parms
-        } catch {
-            $script:ERR = $_
-            Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ 
-            Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription
-        }
-        return $response
-    }
-
-    function RefreshAccessToken([string]$clientId, [string]$secret, [string]$refreshToken){
-    
-        # If we have a Refresh Token, Client ID and Client Secret then we can request an Access Token
-
-        $grantType   = "refresh_token"
-        $parms       = "client_id=$clientId&client_secret=$secret&refresh_token=$refreshToken&grant_type=$grantType"
-    
-        try {
-            $response = Invoke-RestMethod -Uri https://www.googleapis.com/oauth2/v4/token -Method POST -Body $parms
-            return $response.access_token;
-        } catch {
-            $script:ERR = $_
-            Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ 
-            Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription
-        }
-
-    }
-
     function GetAuthCode([string]$authurl){
     # https://github.com/globalsign/OAuth-2.0-client-examples/blob/master/PowerShell/Powershell-example.ps1    
 
         write-host "GetAuthCode()" -ForegroundColor Gray
 
+        <# Testing
+        $authurl = "https://accounts.google.com/o/oauth2/auth?client_id=127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com&redirect_uri=urn:ietf:wg:oauth:2.0:oob&scope=https://www.googleapis.com/auth/photoslibrary https://picasaweb.google.com/data&response_type=code"
+        #>
+
         # windows forms dependencies
-        # https://blogs.technet.microsoft.com/stephap/2012/04/23/building-forms-with-powershell-part-1-the-form/
         Add-Type -AssemblyName System.Windows.Forms 
         Add-Type -AssemblyName System.Web
 
-        # create window for embedded browser
+        # create form for embedded browser
         $form = New-Object Windows.Forms.Form
         $form.Text = "GetAuthCode()"
         $form.Width = 600
@@ -125,13 +77,13 @@
         $icon = New-Object system.drawing.icon ("$PSScriptRoot\img\star.ico") #[system.drawing.icon]::ExtractAssociatedIcon($PSHOME + "\powershell.exe")
         $form.Icon = $icon
     
-        # add a web browser to the form
+        # add a web browser to form
         $web = New-Object Windows.Forms.WebBrowser
         $web.Size = $form.ClientSize
         $web.Anchor = "Left,Top,Right,Bottom"
         $form.Controls.Add($web)
 
-        # global for collecting authorization code response
+        # init global variable for authorization code response
         $Global:redirect_uri = $null
 
         # add handler for the embedded browser's Navigating event
@@ -173,9 +125,51 @@
 
         # decode query string of authorization code response
         $response = [Web.HttpUtility]::ParseQueryString($Global:redirect_uri.Query)
+        $response
+
         if(-not $response.Get("code")) {
             write-host "WebBrowser: authorization code is null" -ForegroundColor Gray
             return
+        }
+
+        return $response.Get("code");
+
+    }
+    
+    function ExchangeCode([string]$clientId, [string]$secret, [string]$code){
+    
+        # Exchange Refresh Token for Access Token
+        # Access Tokens have a limited lifetime (approximately 60 minutes) whereas Refresh Tokens last indefinitely, except for the circumstances defined at https://developers.google.com/identity/protocols/OAuth2#expiration
+        # The Access Token is what you will hardcode into your script, configuring the script to hit the Google Identity Platform to request a Refresh Token on execution. 
+
+        $grantType   = "authorization_code"
+        $redirectURI = "urn:ietf:wg:oauth:2.0:oob";
+        $parms       = "code=$code&client_id=$clientId&client_secret=$secret&redirect_uri=$redirectURI&grant_type=$grantType";
+
+        try {
+            $response = Invoke-RestMethod -Uri "https://accounts.google.com/o/oauth2/token" -Method Post -Body $parms
+        } catch {
+            $script:ERR = $_
+            Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ 
+            Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription
+        }
+        return $response
+    }
+
+    function RefreshAccessToken([string]$clientId, [string]$secret, [string]$refreshToken){
+    
+        # If we have a Refresh Token, Client ID and Client Secret then we can request an Access Token
+
+        $grantType   = "refresh_token"
+        $parms       = "client_id=$clientId&client_secret=$secret&refresh_token=$refreshToken&grant_type=$grantType"
+    
+        try {
+            $response = Invoke-RestMethod -Uri https://www.googleapis.com/oauth2/v4/token -Method POST -Body $parms
+            return $response.access_token;
+        } catch {
+            $script:ERR = $_
+            Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ 
+            Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription
         }
 
     }
@@ -234,56 +228,6 @@
 
 #region API FUNCTIONS
 # -----------------------------------------------------------------------------
-
-    function Get-Picasa-Albums([string]$access_token){
-        write-host "Get-Picasa-Albums()" -ForegroundColor Gray
-        
-        $headers = @{"Authorization" = "Bearer $access_token"}
-        $url     = "https://picasaweb.google.com/data/feed/api/user/default?&kind=album"
-        
-        #https://developers.google.com/picasa-web/docs/3.0/developers_guide_protocol#ListAlbums
-        #$url     = "https://picasaweb.google.com/data/feed/api/user/photosapi?kind=album&v=2.0&fields=entry(title,gphoto:numphotos,media:group(media:thumbnail),link[@rel='http://schemas.google.com/g/2005#feed'](@href))"
-
-        try {
-            $picasa_albums = Invoke-RestMethod -Uri $url -Method Get -Headers $headers
-        } catch {
-            $script:ERR = $_
-            Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
-            Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
-        }
-
-        return $picasa_albums
-    }
-
-    function Get-Picasa-Album-Contents([string]$access_token, [string]$picasa_album_id){
-        write-host "Get-Picasa-Album-Contents()" -ForegroundColor Gray
-        
-        <# Testing
-        write-host "{Hardcoded testing parameters in effect}" -ForegroundColor Yellow
-        $access_token = "ya29.Glz2BZsmSYZvIOs0BTj4943dn2ljVx5rtMpDI6lQleWgXirXV8KuWKjW_zKEQyvf3ACq395CVtWZL1YHpNmAGoxrwN8bP2AINE8sNcw7t6bGnApoNqYcdNABdjjRNA"
-        $picasa_album_id = "1000000421995119" # Auto Backup (~59258)
-        #>
-
-        $headers = @{"Authorization" = "Bearer $access_token"}
-        $url     = "https://picasaweb.google.com/data/feed/api/user/default/albumid/$picasa_album_id"
-                   #https://picasaweb.google.com/data/feed/api/user/default/albumid/{albmId}?start-index=10
-        # Partial query?
-        #$url = "https://picasaweb.google.com/data/feed/api/default/photosapi?kind=album&v=2.0&fields=entry(title,gphoto:numphotos,media:group(media:thumbnail),link[@rel='http://schemas.google.com/g/2005#feed'](@href))"
-        
-        try {
-            $picasa_album_contents = Invoke-RestMethod -Uri $url -Method Get -Headers $headers
-        } catch {
-            $script:ERR = $_
-            Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
-            Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
-        }
-
-        return $picasa_album_contents
-
-        #&imgmax=d
-        #https://developers.google.com/gdata/docs/2.0/reference#max-results
-    }
-
 
     function Get-Google-Albums([string]$access_token){
         write-host "Get-Google-Albums()" -ForegroundColor Gray
@@ -412,37 +356,10 @@
 
     }
 
-
-
-
-
-    
 # -----------------------------------------------------------------------------
 #endregion
 
-Function Compare-ObjectProperties {
-# https://blogs.technet.microsoft.com/janesays/2017/04/25/compare-all-properties-of-two-objects-in-windows-powershell/
-    Param(
-        [PSObject]$ReferenceObject,
-        [PSObject]$DifferenceObject 
-    )
-    $objprops = $ReferenceObject | Get-Member -MemberType Property,NoteProperty | % Name
-    $objprops += $DifferenceObject | Get-Member -MemberType Property,NoteProperty | % Name
-    $objprops = $objprops | Sort | Select -Unique
-    $diffs = @()
-    foreach ($objprop in $objprops) {
-        $diff = Compare-Object $ReferenceObject $DifferenceObject -Property $objprop
-        if ($diff) {            
-            $diffprops = @{
-                PropertyName=$objprop
-                RefValue=($diff | ? {$_.SideIndicator -eq '<='} | % $($objprop))
-                DiffValue=($diff | ? {$_.SideIndicator -eq '=>'} | % $($objprop))
-            }
-            $diffs += New-Object PSObject -Property $diffprops
-        }        
-    }
-    if ($diffs) {return ($diffs | Select PropertyName,RefValue,DiffValue)}     
-}
+
  
 
 
@@ -455,14 +372,31 @@ Function Compare-ObjectProperties {
 # Clear screen
 Clear-Host
 
-#region OAUTH
-# -----------------------------------------------------------------------------
+# OAUTH
+
+if($ACCESS_TOKEN -eq $null -and $REFRESH_TOKEN -eq $null){
+    Write-Host "OAuthorization required" -ForegroundColor Red
+
+    $url = "https://accounts.google.com/o/oauth2/auth?client_id=$CLIENTID&redirect_uri=urn:ietf:wg:oauth:2.0:oob&scope=$SCOPES&response_type=code";
+    GetAuthCode $url
+}
+
+
+#######################################
+return
+#######################################
+
+
+
+
+
+
 
 if($access_token -eq $null){
     
     Write-Host "Access Token required" -ForegroundColor Red
 
-    # We don't have an access token but we do have a refresh token
+    # We don't have an access token but maybe we do have a refresh token?
 
     if($REFRESH_TOKEN -ne $null){
         Write-Host "Refreshing Access Token..." -ForegroundColor Yellow
@@ -545,6 +479,13 @@ if($access_token -eq $null){
 
 }
 
+
+
+
+
+
+
+
 # Check that we have a valid access token (and refresh if necessary)
 $obj_token_info = CheckToken $access_token
 $ts =  [timespan]::fromseconds($obj_token_info.expires_in)
@@ -555,10 +496,10 @@ if($ts.Minutes -lt 5){
 
 
 
-#endregion
 
 
 
+return
 
 
 #$picasa_albums = $null;
