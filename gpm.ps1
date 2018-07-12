@@ -2,7 +2,7 @@ $Global:clientreq = ConvertFrom-Json "{'redirect_uris' : [ 'https://accounts.goo
 
 # OAuthPS
 $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
+$CLIENTSECRET  = "ZZZ"
 $SCOPES        = "https://www.googleapis.com/auth/photoslibrary https://picasaweb.google.com/data"
 $ACCESS_TOKEN  = $null
 $REFRESH_TOKEN = $null
@@ -817,7 +817,7 @@ function Get-GAuthToken([string]$clientId, [string]$secret, [string]$refreshToke
                             } | 
                         Format-List
 
-            # title data is stored in the #text property, but if you don’t enclose "#text" in quotation marks, 
+            # title data is stored in the #text property, but if you donï¿½t enclose "#text" in quotation marks, 
             # Windows PowerShell interprets it as a comment because it begins with a # sign, and you will receive an error message!
 
 #key             = $key;
