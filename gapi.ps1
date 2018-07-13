@@ -10,7 +10,7 @@
 
     # OAuthPS
     $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-    $CLIENTSECRET  = "ZZZ"
+    $CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
     $SCOPES        = "https://www.googleapis.com/auth/photoslibrary https://picasaweb.google.com/data"
     $ERR           = $null
     $DEST_ALBUMS   = "C:\Users\zacjordaan\Desktop\albums.csv" #"C:\Users\ueszjv\Desktop\albums.csv"              # csv output file will be created/updated here
@@ -739,6 +739,7 @@ function Get-GAuthToken0 {
     #Write-Host $GAuthResponse.access_token -ForegroundColor Gray
     return $GAuthResponse.access_token
 }
+
 
 function Get-GAuthToken([string]$clientId, [string]$secret, [string]$refreshToken) {
     
