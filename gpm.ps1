@@ -3,7 +3,7 @@ $Global:g_authcode  = $null
 
 # OAuthPS
 $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
+$CLIENTSECRET  = "zzz"
 $SCOPES        = @( 
                     "https://www.googleapis.com/auth/photoslibrary",
                     "https://picasaweb.google.com/data"
