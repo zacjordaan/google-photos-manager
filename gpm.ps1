@@ -3,14 +3,14 @@ $Global:g_authcode  = $null
 
 # OAuthPS
 $CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "zzz"
+$CLIENTSECRET  = "hC2iktQD7reOAq4vhWAdPWHG"
 $SCOPES        = @( 
                     "https://www.googleapis.com/auth/photoslibrary",
                     "https://picasaweb.google.com/data"
                   )
 $ERR           = $null
-$DEST          = "C:\Users\ueszjv\Desktop\albums.csv"
-#$DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
+#$DEST          = "C:\Users\ueszjv\Desktop\albums.csv"
+$DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
 
 
 
@@ -428,42 +428,6 @@ $DEST          = "C:\Users\ueszjv\Desktop\albums.csv"
         return $media_item
     }
 
-    function Get-Google-Filename([string]$access_token, [string]$base_url){
-        #write-host "Get-Google-Filenames('$($access_token.substring(0,3))...', '$($base_url.substring(0,4))...')" -ForegroundColor Gray
-
-        #https://developers.google.com/photos/library/guides/access-media-items#get-media-item
-        
-        <# testing
-        write-host "{Hardcoded testing parameters in effect}" -ForegroundColor Yellow
-        $access_token = "ya29.Glz2BXWFTjIVt_s0VYTEs3IlaK_78ylK32RznXZQl4G20BPWxh-hoQ7lKCH_PnbV4UdhQy6zgA2ZR0JI-8bcQ4AgnK9iuwnqP2sJ0kwYUHCqKiRTVhLH6_DauIIxZA"
-        $base_url     = "https://lh3.googleusercontent.com/lr/AJ_cxPYZvpVE3vfa1E5vHoujli7vjpGY5dDLUtD5w2p0cQhcETM7Ezl9f7IBKZ-L6uDD5gTl5vNALRhXQ95FQwgXiYvXCFWaSGmXo7D3-48ICmH5O02Z15GZr-MzT6RuHXmLx7FNYGQSesP7VKtDwGdgrAj1ogS46OAaWVelIjJ-SQvcivURT8G7biU6w3ILZzb4hBo6yYVapYSshSJ62CcJZRLmZz9Csf4HSVjzOKfbDm_4L8lTqh_YqIMt2C0rtLKVI7zjzUMKyXA6EK-wnlXsOI-3VsaK2-u4QshhdrTiyobQ8w7-FplTeRUoRS37Kgyr-tDBpMH_8sgoR8ruxtI6hiV2HkQSqwbISiRPD3kBYlGz_c0IWdYpEwUoAmPwf3r9Ye_LpYEE67apWkLmDAOitQSSnvE6tT3TEQwG-RDjtvXd0kj_HFBN79UWwW9ZeWvh_WS_yB4A19KnF4IqXzFN_wJX351_iCnyOJI8PT5V8rLJ9wpY5eBaCMbJgKUtZWVqdzZAAB0TYuoNopwUcN-Nv3m0hF5gZHP-q2BgwY8aj4VTIDkgExAy3lw009kkdn02LkfGOiAAvJ7t5hVyApvWmfWvZu7jtMT3CE5riRHbNUwGc5HhVjOicCugmwhTujaUxG-uQONOJsP6bH-8WVqD6Oh_7rgfBgPgqj2oYOJSCR7WFxKdCOyV5Rer8FdJeMt2vEUtb4SYn9DmABopFRVOn8KcMggXP2X-A4v0jKq_awL1CbsN6gZD7OUc3ZEFsDiYA4doxAk_ZNrfBlcic2_EfAQIbynKvSpKyD10wd5fAWUxnIZbumxhiVRfDA-aeZGgnXVKwzc"
-        #>
-
-        $headers      = @{"Authorization" = "Bearer $access_token"}
-
-        #Warning: Don't use the base URL without specifying a maximum width and height or download parameter.
-        # Here I'm pulling images at 1x1 pixels since I have to pull them in order to access the response header via web-request instead of rest-request!
-        $url          = $base_url + "=w1-h1"
-        $media_item   = $null
-        $filename     = $null
- 
-        #write-host $url -ForegroundColor cyan
-        #Start-Process $url # open in browser
- 
-        try {
-            $media_item = Invoke-WebRequest -Uri $url -Method Get #-Headers $headers
-            $filename   = ([System.Net.Mime.ContentDisposition]$media_item.Headers.'Content-Disposition').FileName
-
-        } catch {
-            $script:ERR = $_
-            Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
-            Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
-        }
-
-        return $filename
-
-    }
-
 # -----------------------------------------------------------------------------
 #endregion
 
@@ -534,9 +498,7 @@ else{
 
 
 #$albums = $null;
-if($albums -eq $null){ 
-    $albums = Get-Albums $access_token 
-}
+if($albums -eq $null){ $albums = Get-Albums $access_token }
 
 
 write-host "Google albums: $($albums.Count)"
@@ -554,19 +516,24 @@ $albums |
 #>
 
 #$parsed_albums | Format-Table -auto
+#$parsed_albums | where { $_.album_idx -gt 117 } | Format-Table -auto
 #return
+
 
 
 $a = 0
 $album_start_time = Get-Date
-foreach($album in $parsed_albums){
+#foreach($album in $parsed_albums){
+foreach($album in $parsed_albums | where { $_.album_idx -gt 394 }){
+#foreach($album in $parsed_albums | where { $_.title -eq "20180403 Toby's 5th Birthday" }){
 
-    Write-Host "$($album.album_idx)`t$($album.title) ($($album.totalMediaItems))"
+    Write-Host "$($album.album_idx)`t$(Get-Date)`t$($album.title) ($($album.totalMediaItems))"
     $media_items = Get-MediaItems $access_token $album.album_id;
 
+    #<#
     $a++
     $album_seconds_elapsed = ((Get-Date) - $album_start_time).TotalSeconds
-    $album_seconds_remaining = ($album_seconds_elapsed / ($i / ($album.totalMediaItems))) - $album_seconds_elapsed
+    $album_seconds_remaining = ($album_seconds_elapsed / ($a / ($parsed_albums.Count))) - $album_seconds_elapsed
     $album_percent_complete = $($a-1)/$($parsed_albums.Count)*100
     Write-Progress -Id 1 `
                    -Activity "Album $($a) of $($parsed_albums.Count)" `
@@ -576,13 +543,15 @@ foreach($album in $parsed_albums){
                    #-SecondsRemaining $album_seconds_remaining `
 
     $start_time = Get-Date
-    #Start-Sleep 60
+    #>
+
     $parsed_media_items = 
     $media_items | 
         #Get-Random -Count 3 | 
         ForEach-Object{
                         $i=1;
                       }{
+                            #<#
                             $seconds_elapsed = ((Get-Date) - $start_time).TotalSeconds
                             $seconds_remaining = ($seconds_elapsed / ($i / ($album.totalMediaItems))) - $seconds_elapsed
                             $item_percent_complete = $($i-1)/$($album.totalMediaItems)*100
@@ -592,6 +561,7 @@ foreach($album in $parsed_albums){
                                            -CurrentOperation "$("{0:N1}" -f $item_percent_complete,2)% complete" `
                                            -SecondsRemaining $seconds_remaining `
                                            -PercentComplete $item_percent_complete;
+                            #>
 
                             [PSCustomObject] @{
                                               album_idx       = $album.album_idx
@@ -614,12 +584,14 @@ foreach($album in $parsed_albums){
                     Sort-Object -Property fileName
         #>
 
-    $parsed_media_items | Export-Csv -NoTypeInformation -append -path $DEST
+    $parsed_media_items | 
+        Export-Csv -NoTypeInformation -append -path $DEST
+        #Format-Table -auto
     
 }
 
 
-Write-Host "Albums exported to $DEST" -ForegroundColor Yellow
+#Write-Host "Albums exported to $DEST" -ForegroundColor Yellow
 write-host "`nFIN" -ForegroundColor Yellow
 
 
