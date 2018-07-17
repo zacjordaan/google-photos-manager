@@ -1,17 +1,24 @@
-$Global:g_clientreq = ConvertFrom-Json "{'redirect_uris' : [ 'https://accounts.google.com/o/oauth2/approval' ]}"
-$Global:g_authcode  = $null
+# https://github.com/RamblingCookieMonster/Invoke-Parallel
+. "$PSScriptRoot\Invoke-Parallel.ps1"
+
+
+$settings_path = Join-Path (Split-Path $Profile) gpm.settings
+
+
+
+$global:clientreq        = ConvertFrom-Json "{'redirect_uris' : [ 'https://accounts.google.com/o/oauth2/approval' ]}"
+$global:authcode         = $null
+$global:hash_media_items = @{}
+#$global:refresh_token
 
 # OAuthPS
-$CLIENTID      = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
-$CLIENTSECRET  = "XXX"
-$SCOPES        = @( 
-                    "https://www.googleapis.com/auth/photoslibrary",
-                    "https://picasaweb.google.com/data"
-                  )
-$ERR           = $null
-#$DEST          = "C:\Users\ueszjv\Desktop\albums.csv"
-$DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
-
+$CLIENTID                = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com"
+$CLIENTSECRET            = "hC2iktQD7reOAq4vhWAdPWHG"
+$SCOPES                  = @("https://www.googleapis.com/auth/photoslibrary","https://picasaweb.google.com/data")
+$ERR                     = $null
+$ALBUMS_CSV              = "C:\Users\ueszjv\Desktop\albums.csv"
+#$ALBUMS_CSV              = "C:\Users\zacjordaan\Desktop\albums.csv"
+$photos_directory        = ""
 
 
 
@@ -37,8 +44,8 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
     }
 
     Now you can take that Access_token and use it to make your requests.
-    But access tokens are only good for 1 hour and then they expire before that time you need to use the Refresh_token to get a new access token. 
-    Also if you are going to want to access your users data again you should save the  refresh_token some place that will enable you to always access their data.
+    But access tokens are only good for 1 hour and then they expire so before that time you need to use the Refresh_token to get a new access token. 
+    Also if you are going to want to access your users data again you should save the refresh_token some place that will enable you to always access their data.
 
     Step 3: Use Refreshtoken
     https://accounts.google.com/o/oauth2/tokenclient_id={ClientId}.apps.googleusercontent.com&client_secret={ClientSecret}&refresh_token={RefreshToken from step 2}&grant_type=refresh_token
@@ -86,7 +93,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
             write-host "Url.AbsolutePath:"$_.Url.AbsolutePath -ForegroundColor Gray
         
             # detect when browser is about to fetch redirect_uri
-            $uri = [uri] $Global:g_clientreq.redirect_uris[0]
+            $uri = [uri] $global:clientreq.redirect_uris[0]
         
             if($_.Url.Authority -eq $uri.Authority -And $_.Url.AbsolutePath -eq $uri.AbsolutePath) {
                 # collect authorization response in a global
@@ -104,7 +111,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
             write-host "add_Navigated event: $($_.Url)" -ForegroundColor Gray
 
             # check if browser fetched redirect_uri
-            $uri = [uri] $Global:g_clientreq.redirect_uris[0]
+            $uri = [uri] $global:clientreq.redirect_uris[0]
 
             if($_.Url.Authority -eq $uri.Authority -And $_.Url.AbsolutePath -eq $uri.AbsolutePath) {
 
@@ -115,7 +122,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
                 $qs = $document_title.Split("=");
 
                 if($qs[0] -eq "Success code"){
-                    $Global:g_authcode = $qs[1];
+                    $global:authcode = $qs[1];
 
                     # close browser window
                     $form.DialogResult = "OK"
@@ -134,7 +141,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
             return $null
         }
 
-        return $Global:g_authcode;
+        return $global:authcode;
     }
     
     function ExchangeCode([string]$clientId, [string]$secret, [string]$code){
@@ -160,9 +167,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
     function RefreshAccessToken([string]$clientId, [string]$secret, [string]$refreshToken){
     
         # If we have a Refresh Token, Client ID and Client Secret then we can request an Access Token
-
         write-host "RefreshAccessToken()" -ForegroundColor Gray
-
 
         $grantType   = "refresh_token"
         $parms       = "client_id=$clientId&client_secret=$secret&refresh_token=$refreshToken&grant_type=$grantType"
@@ -211,6 +216,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
 
         <# Testing
         $access_token = "ya29.Glv3BamWghjT6twpxzGR7IKD3GDiVa2JDzwYw-GL93h5Gp3QIraRiLprn3Lna2zfdgaAq6t25u_dT3nLWTycJt_P9vya68d77Pc4Xe22RqpQEF9B9rnagKol1SDJ"
+        #$access_token = $null
         #>
         
         try {
@@ -237,6 +243,105 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
 
     }
     
+    function Check-Token([string]$access_token){
+    #WIP
+        
+        write-host "CheckToken()" -ForegroundColor Gray
+
+        if($global:refresh_token -eq $null){
+            # Get refresh token if previously saved
+            write-host "Loading refresh_token from disk" -ForegroundColor Gray
+            $cred_path = Join-Path (Split-Path $Profile) gpm_refresh_token.credential
+            if(Test-Path $cred_path -PathType Leaf){ $global:refresh_token = Import-CliXml $cred_path }
+        }
+
+        write-host $("global:refresh_token = $global:refresh_token") -ForegroundColor Gray
+
+        <# Testing
+        cls
+        $url            = $null
+        $obj_token_info = $null
+        $access_token   = $null
+        #$access_token   = "ya29.Glv3BamWghjT6twpxzGR7IKD3GDiVa2JDzwYw-GL93h5Gp3QIraRiLprn3Lna2zfdgaAq6t25u_dT3nLWTycJt_P9vya68d77Pc4Xe22RqpQEF9B9rnagKol1SDJ"
+        #>
+
+        <#
+        $private:return = @{"status"=0}
+        $uri = "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=$access_token"
+
+        # create http headers for use in rest call
+        #$headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+        #$headers.Add("Authorization", "123456")
+
+        # attempt rest call, catch errors
+        try {
+	        $obj_token_info = Invoke-RestMethod -uri $uri
+        }
+        catch {
+	        $msg = 
+	        Write-host "Failed to get tokeninfo" -ForegroundColor Gray
+	        $Private:return.exception = $_.Exception
+	        $Private:return.status = -1
+        }
+
+        # get HTTP status description
+        $Private:return.exception.response.statusdescription
+
+        # get http status code as string
+        $Private:return.exception.response.statuscode
+        
+        # get http status code as numerical value
+        [int]$Private:return.exception.response.statuscode
+
+        # set status code to var
+        $statuscode = [int]$Private:return.exception.response.statuscode
+
+        #https://www.restapitutorial.com/httpstatuscodes.html
+        if ($statuscode -eq 400) {
+            # bad data?
+            $dosomethingelse
+        }
+        if ($statuscode -eq 401) {
+            # failed to auth
+            $dosomthing
+        }
+        if ($Private:return.status -eq -1) {
+            #catch any other exceptions
+            $dosomethingdifferent
+        }
+        else {
+            # IT WORKED continue on
+            $moveon
+        }
+
+
+        try {
+            $url = "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=$access_token"
+            $obj_token_info = Invoke-RestMethod $url
+
+            if(!$obj_token_info){
+                Write-Host "Access Token could not be validated" -ForegroundColor Red
+                return $null
+            }
+            elseif($obj_token_info.aud -ne $CLIENTID)
+            {
+                Write-Host "INVALID Access Token" -ForegroundColor Red
+                return $null
+            }
+            else{
+                return $obj_token_info
+            }
+        } catch {
+            $script:ERR = $_
+            Write-Host "`tStatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Gray
+            Write-Host "`tStatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Gray
+        }
+
+        #>
+    }
+
+
+
 
 # -----------------------------------------------------------------------------
 #endregion
@@ -246,7 +351,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
 
     function Get-Albums([string]$access_token){
         write-host "Get-Albums()" -ForegroundColor Gray
-        
+
         <# testing
         write-host "{Hardcoded testing parameters in effect}" -ForegroundColor Yellow
         $access_token = "ya29.Glz2Bc71SyOXT-7sXsuDGD-_3QGwAOR34rJTp8J0Xqfr9tGkVMbkhQnhNNU6Du5Aa59AxEPwlGmDoatyLBgfMGOYBtPGS6yWqw1dFOMA9koTf7L-y7Q3Kbtfwa-JGg"
@@ -260,12 +365,18 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
  
         try {
             $thisurl = $url
+            $progressPreference = 'silentlyContinue'    # Subsequent calls should not display UI
+            $dt_start = Get-Date
             while($nextPageToken -ne $null){
                 if($nextPageToken -ne $null){ $thisurl = $url + "&pageToken=$nextPageToken"; }
                 $response      = Invoke-RestMethod -Uri $thisurl -Method Get -Headers $headers
                 $nextPageToken = $response.nextPageToken
                 $google_albums += $response.albums
             }
+            $dt_end = Get-Date
+            $elapsed_time = ($dt_end - $dt_start)
+            Write-Host $("`t...{0:hh\:mm\:ss}" -f $elapsed_time) -ForegroundColor Gray
+            $progressPreference = 'Continue'            # Subsequent calls will display UI
         } catch {
             $script:ERR = $_
             Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ -ForegroundColor Red
@@ -279,7 +390,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
     }
 
     function Get-MediaItems([string]$access_token, [string]$album_id){
-        write-host "Get-MediaItems()" -ForegroundColor Gray
+        write-host -NoNewline "Get-MediaItems()" -ForegroundColor Gray
 
         # https://developers.google.com/photos/library/guides/list#listing-library-contents
 
@@ -318,7 +429,7 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
           
 
                 # Append (export) results to csv (selected properties only)
-                #$albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $DEST_ALBUMS
+                #$albums | Select-Object id, title, totalMediaItems, productUrl | export-csv -NoTypeInformation -append -path $ALBUMS_CSV_ALBUMS
             }
 
         } catch {
@@ -327,11 +438,12 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
             Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription -ForegroundColor Red
         }
 
+        write-host "`t$($mediaItems.count)" -ForegroundColor Gray
         return $mediaItems
     }
 
     function Get-Filename([string]$access_token, [string]$base_url){
-        #write-host "Get-Google-Filenames('$($access_token.substring(0,3))...', '$($base_url.substring(0,4))...')" -ForegroundColor Gray
+        #write-host "Get-Filename('$($access_token.substring(0,3))...', '$($base_url.substring(0,4))...')" -ForegroundColor Gray
 
         #https://developers.google.com/photos/library/guides/access-media-items#get-media-item
         
@@ -431,8 +543,74 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
 # -----------------------------------------------------------------------------
 #endregion
 
+function Select-Folder {
 
+    Add-Type -AssemblyName System.Windows.Forms
+    $FolderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+
+    #$FolderBrowser.SelectedPath = "C:\"
+    if($photos_directory){ $FolderBrowser.SelectedPath = $photos_directory; }
+    else{ $FolderBrowser.SelectedPath = [environment]::getfolderpath("MyPictures") }
+    #else{ $FolderBrowser.RootFolder = "MyPictures" }
+
+    $FolderBrowser.ShowNewFolderButton = $false
+    $FolderBrowser.Description = "Select a directory"
+
+    $loop = $true
+    while($loop){
+        if ($FolderBrowser.ShowDialog() -eq "OK"){
+            $loop = $false
+        }else{
+            return
+        }
+    }
+    $path = $FolderBrowser.SelectedPath
+    $FolderBrowser.Dispose()
+    return $path
+} 
  
+
+
+#################################################################
+# INIT
+# Remove-Variable settings;
+# Remove-Item -Path $settings_path
+#################################################################
+
+# Clear screen
+Clear-Host
+
+if($settings -eq $null)
+{
+    if(Test-Path $settings_path -PathType Leaf){
+        write-host "Reading Settings"
+        $settings = Import-CliXml $settings_path 
+    }
+    else
+    {
+        # Initialize settings
+        $settings = @{
+                    "client_id"     = "127194997596-u2h1uqgu2d05ocgt6i59mpb72pcn5kii.apps.googleusercontent.com";
+                    "scopes"        = @("https://www.googleapis.com/auth/photoslibrary","https://picasaweb.google.com/data")
+                    }
+        $defaultValue = 'hC2iktQD7reOAq4vhWAdPWHG'
+        $settings.client_secret = if (($result = Read-Host "Press enter to accept default value $defaultValue") -eq '') {$defaultValue} else {$result}
+
+        # Save them for later
+        $settings | Export-CliXml $settings_path
+    }
+} 
+
+
+if(!$settings.photos_directory){ 
+    $settings.photos_directory = Select-Folder 
+    $settings | Export-CliXml $settings_path
+}
+#$settings
+
+#######################################
+return
+#######################################
 
 
 
@@ -441,13 +619,17 @@ $DEST          = "C:\Users\zacjordaan\Desktop\albums.csv"
 #################################################################
 
 
-# Clear screen
-Clear-Host
-
+# Get refresh token if previously saved
+#$cred_path = Join-Path (Split-Path $Profile) gpm_refresh_token.credential
+#if(Test-Path $cred_path -PathType Leaf){ $REFRESH_TOKEN = Import-CliXml $cred_path }
+#Get-Variable bla* | Export-Clixml vars.xml
+#Import-Clixml .\vars.xml | %{ Set-Variable $_.Name $_.Value }
 
 #region OAUTH
 #------------------------------------------------------------------------------
 
+#$ACCESS_TOKEN = $null
+#$REFRESH_TOKEN = $null
 if($ACCESS_TOKEN -eq $null -and $REFRESH_TOKEN -eq $null){
     
     Write-Host "OAuthorization required" -ForegroundColor Yellow
@@ -464,12 +646,15 @@ if($ACCESS_TOKEN -eq $null -and $REFRESH_TOKEN -eq $null){
     $ACCESS_TOKEN  = $token.access_token
     $REFRESH_TOKEN = $token.refresh_token
 
+    # save refresh_token to disk
+    $CredXmlPath = Join-Path (Split-Path $Profile) gpm_refresh_token.credential
+    $REFRESH_TOKEN | Export-CliXml $CredXmlPath
 }
 elseif($ACCESS_TOKEN -eq $null -and $REFRESH_TOKEN -ne $null){
-    
+    Write-Host "No access_token but we do have a refresh_token..." -ForegroundColor Yellow
+
     # Refresh Access Token
     $ACCESS_TOKEN = RefreshAccessToken $CLIENTID $CLIENTSECRET $REFRESH_TOKEN
-
 }
 
 # Check that access token is valid and refresh if necessary
@@ -482,76 +667,207 @@ if(!$obj_token_info -And $REFRESH_TOKEN -ne $null){
 } 
 
 if($obj_token_info){
-    $ts =  [timespan]::fromseconds($obj_token_info.expires_in)
-    write-host "Access Token OK... expires in $ts" -ForegroundColor Green
-    #if($ts.Minutes -lt 5){ $ACCESS_TOKEN = RefreshAccessToken $CLIENTID $CLIENTSECRET $REFRESH_TOKEN; }
+    $ts = [timespan]::fromseconds($obj_token_info.expires_in)
+    $dt_expiry = (Get-Date) + $ts
+    write-host $("Access Token OK... expires in {0:hh\:mm\:ss} at {1:hh\:mm\:ss}" -f $ts, $dt_expiry) -ForegroundColor Green
+    if($ts.Minutes -lt 10){ $ACCESS_TOKEN = RefreshAccessToken $CLIENTID $CLIENTSECRET $REFRESH_TOKEN; }
 }
 else{
     write-host "Access Token could not be verified!" -ForegroundColor Red
     return
 }
 
+
+#$m = [timespan]::($dt_expiry-(Get-Date))
+#
+#$m.Minute
+#
+#if(   -lt 5  ){
+#
+#}
+#
+#$StartDate=(GET-DATE)
+#
+#$EndDate=[datetime]”01/01/2014 00:00”
+#
+#NEW-TIMESPAN –Start $StartDate –End $EndDate
+#
+#$obj_token_info = CheckToken $ACCESS_TOKEN
+
+###################
+#return
+###################
+
+
 #------------------------------------------------------------------------------
 #endregion
 
 
+#20060000 - Misc
+#Get-MediaItems $access_token "AGj1epUkkuYXE15k637KamAHbEuSp02gNc0aRo9rogogznU13OKt";
 
 
 #$albums = $null;
-if($albums -eq $null){ $albums = Get-Albums $access_token }
+if($albums -eq $null){ 
+
+    #$albums = Get-Albums $access_token 
+
+    #<#
+    if (Test-Path $ALBUMS_CSV) {
+        # albums.csv exists - prompt to load from file instead of calling Google Photos API
+        $confirmation = Read-Host "Album data found at ""$ALBUMS_CSV""`nLoad albums from file instead of Google Photos API?"
+        if ($confirmation -eq "y" -or $confirmation -eq "yes") {
+
+            $cols = "album_idx", "title", "totalMediaItems", "album_id"
+
+            $albums = Import-Csv $ALBUMS_CSV | 
+                #Select-Object $cols -First 780 |
+                    Group-Object $cols |
+                        Select-Object @{n = 'album_idx';       e = {$_.Group[0].album_idx}},
+                                      @{n = 'title';           e = {$_.Group[0].title}}, 
+                                      @{n = 'totalMediaItems'; e = {$_.Group[0].totalMediaItems}}, 
+                                      @{n = 'album_id';        e = {$_.Group[0].album_id}}, 
+                                      @{n = 'count_items';     e = {$_.Count}}
+
+            #$albums | Where-Object { $_.totalMediaItems -ne $_.count_items } | Format-Table -AutoSize
+
+        } else{
+            $albums = Get-Albums $access_token 
+        }
+    } else {
+        $albums = Get-Albums $access_token 
+    }
+    #>
+}
 
 
 write-host "Google albums: $($albums.Count)"
 write-host
-
-$parsed_albums = 
-$albums | 
-    #Get-Random -Count 3 <#| 
-        Sort-Object -Property @{Expression={$_.title}} -Descending |
-            Foreach-Object {$i=1}{$_ | Add-Member "album_idx" ($i++) -Force -PassThru} |
-                Select-Object -Property album_idx, title, totalMediaItems, @{N='album_id';E={$_.id}} <#|
-                    Select-Object -Last 20 |
-                        Format-Table -auto
-                        #Export-CSV -NoTypeInformation -Path "C:\Users\ueszjv\Desktop\albums_google.csv"
-#>
-
-#$parsed_albums | Format-Table -auto
-#$parsed_albums | where { $_.album_idx -gt 117 } | Format-Table -auto
 #return
 
 
+$parsed_albums = $albums | 
+    #Get-Random -Count 3 <#| 
+        Sort-Object -Property @{Expression={$_.title}} -Descending |
+            Foreach-Object {$i=1}{$_ | Add-Member "album_idx" ($i++) -Force -PassThru} |
+                Select-Object -Property album_idx, title, totalMediaItems, @{N='album_id';E={$_.id}} |
+                    Where-Object {$_.totalMediaItems -ne $null} |
+                        Select -First 5
+                        #Where-Object {$_.title -in "promo2","PROMO" }
 
+#$parsed_albums | Format-List
+#where-object { $_.album_idx -gt 117 }
+#Where-Object {$_.title -in "20170513 Kata-Kanu","20170513 JOTT","20170512 Jem Loses His First Tooth" -And $_.totalMediaItems -ne $null } |
+
+#Get-MediaItems $access_token "AGj1epUDOQUGd0ZMKCsri7V3zL4WIizTzM3OuL6iocPAiGjLHO0q"
+#Get-MediaItems $access_token "AGj1epW_xJ0ASfeQP9SO2ir0G45dLEHWue6iDangQA25fw8FNgZH"
+
+###################
+#return
+###################
+
+
+
+$dt_start = Get-Date
+ForEach($album in $parsed_albums){
+    
+    Write-Host "$($album.album_idx)`t$(Get-Date)`t$($album.title) ($($album.totalMediaItems))"
+
+    $media_items = Get-MediaItems $access_token $album.album_id |
+        ForEach-Object{$i=1;}{[PSCustomObject] @{
+                                                album_idx       = $album.album_idx
+                                                title           = $album.title
+                                                totalMediaItems = $album.totalMediaItems
+                                                album_id        = $album.album_id
+                                                item_idx        = $i;
+                                                mimeType        = $_.mimeType;
+                                                mediaItemId     = $_.id;
+                                                baseUrl         = $_.baseUrl;
+                                                };
+                                                #fileName        = Get-Filename $access_token $_.baseUrl;
+                            $i++ 
+                        }
+        
+    
+    $media_items | 
+    Invoke-Parallel -ImportVariables -ImportFunctions -ScriptBlock {
+        $updated_media_item = $_ | 
+            Add-Member "fileName" (Get-Filename $access_token $_.baseUrl) -Force -PassThru |
+                Select-Object album_idx,title,totalMediaItems,album_id,item_idx,fileName,mimeType,mediaItemId;
+        $album_mediaItem_key = "$($updated_media_item.album_id)|$($updated_media_item.mediaItemId)"
+        $global:hash_media_items.Add($album_mediaItem_key, $updated_media_item);
+    }
+
+}
+
+$dt_end = Get-Date
+$elapsed_time = ($dt_end - $dt_start)
+Write-Host $("`nProcessed $($global:hash_media_items.Count) album filenames in: {0:hh\:mm\:ss}" -f $elapsed_time) -ForegroundColor Cyan
+
+
+$confirmation = "y"
+if(Test-Path -Path $ALBUMS_CSV -PathType leaf){ $confirmation = Read-Host """$ALBUMS_CSV"" already exists. Overwrite it?" }
+
+if ($confirmation -eq "y" -or $confirmation -eq "yes") {
+    $global:hash_media_items.Values | 
+        Export-Csv -Path $ALBUMS_CSV -NoTypeInformation
+        
+    Write-Host "Exported to $ALBUMS_CSV" -ForegroundColor Cyan
+} else{
+    write-host "Export-Csv cancelled."
+}
+
+
+
+#Write-Host "Albums exported to $ALBUMS_CSV" -ForegroundColor Yellow
+write-host "`nFIN" -ForegroundColor Yellow
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<# Original - Serial
 $a = 0
+$dt_start = Get-Date
 $album_start_time = Get-Date
-#foreach($album in $parsed_albums){
-foreach($album in $parsed_albums | where { $_.album_idx -gt 394 }){
+
+foreach($album in $parsed_albums){
+#foreach($album in $parsed_albums | where { $_.album_idx -gt 394 }){
 #foreach($album in $parsed_albums | where { $_.title -eq "20180403 Toby's 5th Birthday" }){
 
     Write-Host "$($album.album_idx)`t$(Get-Date)`t$($album.title) ($($album.totalMediaItems))"
     $media_items = Get-MediaItems $access_token $album.album_id;
 
-    #<#
     $a++
     $album_seconds_elapsed = ((Get-Date) - $album_start_time).TotalSeconds
     $album_seconds_remaining = ($album_seconds_elapsed / ($a / ($parsed_albums.Count))) - $album_seconds_elapsed
-    $album_percent_complete = $($a-1)/$($parsed_albums.Count)*100
+    $album_percent_complete = $($a-1)/$($parsed_albums.Count)
     Write-Progress -Id 1 `
                    -Activity "Album $($a) of $($parsed_albums.Count)" `
                    -Status "Progress: " `
-                   -CurrentOperation "$("{0:p1}" -f $album_percent_complete)" `
+                   -CurrentOperation "$("{0:p0}" -f $album_percent_complete)" `
                    -PercentComplete $album_percent_complete;
                    #-SecondsRemaining $album_seconds_remaining `
 
     $start_time = Get-Date
-    #>
+
 
     $parsed_media_items = 
-    $media_items | 
-        #Get-Random -Count 3 | 
-        ForEach-Object{
-                        $i=1;
-                      }{
-                            #<#
+        $media_items | 
+            #Get-Random -Count 3 | 
+            ForEach-Object{
+                            $i=1;
+                          }{
+
                             $seconds_elapsed = ((Get-Date) - $start_time).TotalSeconds
                             $seconds_remaining = ($seconds_elapsed / ($i / ($album.totalMediaItems))) - $seconds_elapsed
                             $item_percent_complete = $($i-1)/$($album.totalMediaItems)*100
@@ -561,38 +877,30 @@ foreach($album in $parsed_albums | where { $_.album_idx -gt 394 }){
                                            -CurrentOperation "$("{0:N1}" -f $item_percent_complete,2)% complete" `
                                            -SecondsRemaining $seconds_remaining `
                                            -PercentComplete $item_percent_complete;
-                            #>
 
-                            [PSCustomObject] @{
-                                              album_idx       = $album.album_idx
-                                              title           = $album.title
-                                              totalMediaItems = $album.totalMediaItems
-                                              album_id        = $album.album_id
-                                              item_idx        = $i;
-                                              fileName        = Get-Filename $access_token $_.baseUrl;
-                                              mimeType        = $_.mimeType;
-                                              mediaItemId     = $_.id;
-                                              };
-                            $i++ 
-                          } | 
-            Sort-Object -Property fileName
-        <#
-        Foreach-Object {$i=1}{$_ | 
-            Add-Member "item_idx" ($i++) -Force -PassThru | 
-            Add-Member "fileName" (Get-Filename $access_token $_.baseUrl) -Force -PassThru} |
-                Select-Object -Property item_idx, fileName, mimeType, @{N='mediaItemId';E={$_.id}} |
-                    Sort-Object -Property fileName
-        #>
+                                [PSCustomObject] @{
+                                                  album_idx       = $album.album_idx
+                                                  title           = $album.title
+                                                  totalMediaItems = $album.totalMediaItems
+                                                  album_id        = $album.album_id
+                                                  item_idx        = $i;
+                                                  fileName        = Get-Filename $access_token $_.baseUrl;
+                                                  mimeType        = $_.mimeType;
+                                                  mediaItemId     = $_.id;
+                                                  };
+                                $i++ 
+                              } | 
+                Sort-Object -Property fileName
 
-    $parsed_media_items | 
-        Export-Csv -NoTypeInformation -append -path $DEST
-        #Format-Table -auto
+    foreach($updated_media_item in $parsed_media_items){
+        $global:hash_media_items.Add($updated_media_item.mediaItemId, $updated_media_item);
+    }
+    
+    #$parsed_media_items | Export-Csv -NoTypeInformation -append -path $ALBUMS_CSV
     
 }
 
-
-#Write-Host "Albums exported to $DEST" -ForegroundColor Yellow
-write-host "`nFIN" -ForegroundColor Yellow
-
-
-
+$dt_end = Get-Date
+$elapsed_time = ($dt_end - $dt_start)
+Write-Host $("`nProcessed $($global:hash_media_items.Count) album filenames in: {0:hh\:mm\:ss}" -f $elapsed_time) -ForegroundColor Cyan
+#>

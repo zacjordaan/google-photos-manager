@@ -1,0 +1,20 @@
+{
+    "manifest_version": 2,
+    "name": "Google Photos Manager",
+    "description": "Google Photos Manager - Chrome Extension",
+    "version": "1.0",
+    "minimum_chrome_version": "24",
+    "browser_action": {
+        "default_icon": "icon.png",
+        "default_popup": "popup.html"
+    },
+    "permissions": [
+        "activeTab",
+        {"fileSystem": ["write", "retainEntries", "directory"]}
+        ],
+        "file_handlers": {
+            "text": {
+                "types": ["text/*"]
+            }
+        }
+}
