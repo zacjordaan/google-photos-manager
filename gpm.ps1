@@ -568,6 +568,36 @@ function Select-Folder {
     $FolderBrowser.Dispose()
     return $path
 } 
+
+function Select-Folder2($initial_dir) {
+
+    Add-Type -AssemblyName System.Windows.Forms
+    
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.ShowNewFolderButton = $false
+    $dlg.Description = "Select a directory"
+    
+    if($initial_dir){ $dlg.SelectedPath = $initial_dir; }
+    else{ $dlg.SelectedPath = [environment]::getfolderpath("MyPictures") }
+
+    # Work-around to ensure that dialog is topmost (when run from ise it tends to go to background)
+    $topmost = New-Object System.Windows.Forms.Form
+    $topmost.TopMost = $True
+    $topmost.MinimizeBox = $True
+
+    $loop = $true
+    while($loop){
+        if ($dlg.ShowDialog($topmost) -eq "OK"){
+            $loop = $false
+        }else{
+            return
+        }
+    }
+    $selected_folder_path = $dlg.SelectedPath
+    $dlg.Dispose()
+
+    return $selected_folder_path
+} 
  
 
 
@@ -575,10 +605,13 @@ function Select-Folder {
 # INIT
 # Remove-Variable settings;
 # Remove-Item -Path $settings_path
+# Remove-Item $(Join-Path (Split-Path $Profile) gpm.config)
+# $config=$null
 #################################################################
 
 # Clear screen
 Clear-Host
+
 
 if($settings -eq $null)
 {
@@ -606,10 +639,11 @@ if(!$settings.photos_directory){
     $settings.photos_directory = Select-Folder 
     $settings | Export-CliXml $settings_path
 }
-#$settings
+
+$settings
 
 #######################################
-return
+#return
 #######################################
 
 
@@ -660,6 +694,7 @@ elseif($ACCESS_TOKEN -eq $null -and $REFRESH_TOKEN -ne $null){
 # Check that access token is valid and refresh if necessary
 
 $obj_token_info = CheckToken $ACCESS_TOKEN
+
 if(!$obj_token_info -And $REFRESH_TOKEN -ne $null){ 
     write-host "No token info available... may have already expired. Refresh and try again"
     $ACCESS_TOKEN = RefreshAccessToken $CLIENTID $CLIENTSECRET $REFRESH_TOKEN 
@@ -669,6 +704,7 @@ if(!$obj_token_info -And $REFRESH_TOKEN -ne $null){
 if($obj_token_info){
     $ts = [timespan]::fromseconds($obj_token_info.expires_in)
     $dt_expiry = (Get-Date) + $ts
+    $settings.expiry = $dt_expiry
     write-host $("Access Token OK... expires in {0:hh\:mm\:ss} at {1:hh\:mm\:ss}" -f $ts, $dt_expiry) -ForegroundColor Green
     if($ts.Minutes -lt 10){ $ACCESS_TOKEN = RefreshAccessToken $CLIENTID $CLIENTSECRET $REFRESH_TOKEN; }
 }
@@ -678,21 +714,7 @@ else{
 }
 
 
-#$m = [timespan]::($dt_expiry-(Get-Date))
-#
-#$m.Minute
-#
-#if(   -lt 5  ){
-#
-#}
-#
-#$StartDate=(GET-DATE)
-#
-#$EndDate=[datetime]”01/01/2014 00:00”
-#
-#NEW-TIMESPAN –Start $StartDate –End $EndDate
-#
-#$obj_token_info = CheckToken $ACCESS_TOKEN
+
 
 ###################
 #return
@@ -703,16 +725,27 @@ else{
 #endregion
 
 
+
+# Get local directories
+#$dirs = $(Get-ChildItem -Path $settings.photos_directory -Recurse -Directory -Force -ErrorAction SilentlyContinue | Select-Object FullName)
+#$dirs
+
+###################
+#return
+###################
+
+
 #20060000 - Misc
 #Get-MediaItems $access_token "AGj1epUkkuYXE15k637KamAHbEuSp02gNc0aRo9rogogznU13OKt";
 
 
 #$albums = $null;
+# Populate the Albums list (either by querying the Google API or loading from a previously saved file)
 if($albums -eq $null){ 
 
-    #$albums = Get-Albums $access_token 
+    $albums = Get-Albums $access_token 
 
-    #<#
+    <#
     if (Test-Path $ALBUMS_CSV) {
         # albums.csv exists - prompt to load from file instead of calling Google Photos API
         $confirmation = Read-Host "Album data found at ""$ALBUMS_CSV""`nLoad albums from file instead of Google Photos API?"
@@ -741,9 +774,11 @@ if($albums -eq $null){
 }
 
 
-write-host "Google albums: $($albums.Count)"
+write-host "Google Photos Albums: $($albums.Count)"
 write-host
+###################
 #return
+###################
 
 
 $parsed_albums = $albums | 
@@ -751,25 +786,35 @@ $parsed_albums = $albums |
         Sort-Object -Property @{Expression={$_.title}} -Descending |
             Foreach-Object {$i=1}{$_ | Add-Member "album_idx" ($i++) -Force -PassThru} |
                 Select-Object -Property album_idx, title, totalMediaItems, @{N='album_id';E={$_.id}} |
-                    Where-Object {$_.totalMediaItems -ne $null} |
+                    Where-Object {$_.totalMediaItems -ne $null} <#|
                         Select -First 5
                         #Where-Object {$_.title -in "promo2","PROMO" }
+                        #>
 
-#$parsed_albums | Format-List
 #where-object { $_.album_idx -gt 117 }
 #Where-Object {$_.title -in "20170513 Kata-Kanu","20170513 JOTT","20170512 Jem Loses His First Tooth" -And $_.totalMediaItems -ne $null } |
 
 #Get-MediaItems $access_token "AGj1epUDOQUGd0ZMKCsri7V3zL4WIizTzM3OuL6iocPAiGjLHO0q"
 #Get-MediaItems $access_token "AGj1epW_xJ0ASfeQP9SO2ir0G45dLEHWue6iDangQA25fw8FNgZH"
 
+write-host "Parsed Albums: $($parsed_albums.Count)"
+#$parsed_albums | Format-List
+write-host
+
+
+
 ###################
-#return
+return
 ###################
 
 
 
 $dt_start = Get-Date
 ForEach($album in $parsed_albums){
+
+    # Check token expiry and refresh if necessary
+    if((New-TimeSpan -Start (Get-Date) -End $settings.expiry).Minutes -lt 10){ $ACCESS_TOKEN = RefreshAccessToken $CLIENTID $CLIENTSECRET $REFRESH_TOKEN; }
+
     
     Write-Host "$($album.album_idx)`t$(Get-Date)`t$($album.title) ($($album.totalMediaItems))"
 
