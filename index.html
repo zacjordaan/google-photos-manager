@@ -152,41 +152,50 @@
     // Trust, The Google JS library is closed source, and is updated arbitrarily, and without warning. So if the G engineers break it (as they have done in the past), you have nowhere to turn and your app is down until it is fixed. Provided you have a mainstream use case, it should get fixed, but there is no guarantee. If you are using an edge case (perhaps an unusual nodejs configuration, or idiosyncratic browser) you could be left high and dry.
     // Option 1 is nice because if the Drive team add a new feature to the API, I can use it straight away, without waiting for the JS Client Library maintainer to support it too. It also makes debugging easier since what goes over the wire is directly related to my code.
 
-    function listAlbums() {
+
+    function listAlbums(pageToken) {
 
       // GET https://photoslibrary.googleapis.com/v1/albums
 
-      // {
-      //   "albums": [
-      //     {
-      //       "id": "ALBUM_ID",
-      //       "title": "ALBUM_TITLE",
-      //       "productUrl": "ALBUM_PRODUCT_URL",
-      //       "coverPhotoBaseUrl" "ALBUM_COVER_BASE_URL-DO_NOT_USE_DIRECTLY",
-      //       "isWriteable": "WHETHER_YOU_CAN_WRITE_TO_THIS_ALBUM",
-      //       "totalMediaItems: NUMBER_OF_MEDIA_ITEMS_IN_ALBUM
-      //     },
-      //     ...
-      //   ],
-      //   "nextPageToken": "TOKEN_FOR_PAGINATION"
-      // }
+      // https://developers.google.com/photos/library/reference/rest/v1/albums
 
-      return gapi.client.photoslibrary.albums.list({pageSize: 50})
+
+      // Get albums already stored in localstorage or create a default object if first time
+      var ls_albums = localStorage.getItem('ls_albums');
+      ls_albums = ls_albums ? JSON.parse(ls_albums) : {};
+
+
+      var divAlbums = document.getElementById('divAlbums');
+      var i = 0;
+
+      //console.log('divAlbums.children.length:', divAlbums.children.length);
+      console.log('ls_albums.length:', ls_albums.length);
+
+      // clear children
+      while (divAlbums.firstChild) divAlbums.removeChild(divAlbums.firstChild);
+
+      return gapi.client.photoslibrary.albums.list({pageSize: 50, pageToken: pageToken})
           .then(function(response) {
                   // Handle the results here (response.result has the parsed body).
                   console.log("Response", response);
 
-                  var divAlbums = document.getElementById('divAlbums');
-
-                  // clear children
-                  while (divAlbums.firstChild) {
-                    divAlbums.removeChild(divAlbums.firstChild);
-                  }
-
                   response.result.albums.forEach(album => {
                     //console.log('album:', album);
-                    divAlbums.insertAdjacentHTML('beforeend', '<li id="' + album.id + '" onclick="listMediaItems(\'' + album.id + '\')">' + album.title + ' <a href="' + album.productUrl + '"> (' + album.totalMediaItems + ') </a></li>');
+                    ls_albums[album.id] = album;
+                    //divAlbums.insertAdjacentHTML('beforeend', '<li id="' + album.id + '" onclick="listMediaItems(\'' + album.id + '\')">' + album.title + ' <a href="' + album.productUrl + '"> (' + album.mediaItemsCount + ') </a></li>');
                   });
+
+                  localStorage.setItem('ls_albums', JSON.stringify(ls_albums));
+
+                  //console.log('divAlbums.children.length:', divAlbums.children.length);
+                  
+                  var next_page_token = response.result.nextPageToken;
+                  //if(divAlbums.children.length < 100 && next_page_token != null){
+                  if(ls_albums.length < 200 && next_page_token != null){
+                    console.log('next_page_token:', next_page_token);
+                    listAlbums(next_page_token);
+                    console.log('ls_albums.length:', ls_albums.length);
+                  }
 
                 },
                 function(err) { console.error("Execute error", err); });
